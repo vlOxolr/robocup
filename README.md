@@ -1,6 +1,6 @@
 # RoboCup@Home
 # 栋子哥nb！
-##How to run our world+tiago in rviz and Gazebo
+## How to run our world+tiago in rviz and Gazebo
 ```
 # 清理上次仿真残留
 pkill -f gzserver; pkill -f gzclient; pkill -f roslaunch || true
