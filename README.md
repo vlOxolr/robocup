@@ -1,7 +1,5 @@
 # RoboCup@Home
 # 栋子哥nb！
-## Note
-object_labeling removed
 
 ## structure
 - main_ws: tiago workspace
