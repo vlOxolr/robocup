@@ -5,20 +5,20 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "plane_segmentation");
   ros::NodeHandle nh;
 
-  // 设置 TIAGo 的点云话题（来自 xtion 的注册深度点云）
+  // Set TIAGo point cloud topic (registered depth from xtion)
   std::string pointcloud_topic_name = "/xtion/depth_registered/points";
 
-  // 设置机器人底座坐标系（地面高度为 0 的 frame）
+  // Set robot base frame (frame with ground height at 0)
   // !!! IMPORTANT !!!
-  // 如果 TF 不通，把 "base_link" 换成 "base_footprint"
+  // If TF is unavailable, replace "base_link" with "base_footprint"
   std::string base_frame_name = "base_link";
 
-  // 构建分割对象
+  // Construct segmentation object
   PlaneSegmentation segmentation(
       pointcloud_topic_name,
       base_frame_name);
 
-  // 初始化
+  // Initialize
   if(!segmentation.initalize(nh))
   {
     ROS_ERROR_STREAM("Error init PlaneSegmentation");
@@ -29,7 +29,7 @@ int main(int argc, char** argv)
                   << pointcloud_topic_name
                   << " with base frame: " << base_frame_name);
 
-  // 更新循环
+  // Update loop
   ros::Rate rate(30);
   while(ros::ok())
   {

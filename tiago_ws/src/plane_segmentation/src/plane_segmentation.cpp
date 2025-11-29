@@ -17,19 +17,19 @@ bool PlaneSegmentation::initalize(ros::NodeHandle& nh)
 {
   // >>> TODO: subscribe to the pointcloud_topic_ and link it to the right callback
   point_cloud_sub_ = nh.subscribe(
-      pointcloud_topic_,           // 构造函数中传进来的点云话题
+      pointcloud_topic_,           // Point cloud topic passed in via constructor
       1,
       &PlaneSegmentation::cloudCallback,
       this);
 
   // >>> TODO: advertise the pointcloud for the table plane
   plane_cloud_pub_ = nh.advertise<sensor_msgs::PointCloud2>(
-      "plane_segmentation/table_cloud",  // 桌子平面的点云
+      "plane_segmentation/table_cloud",  // Point cloud of the table plane
       1);
 
   // >>> TODO: advertise the pointcloud for the remaining points (objects)
   objects_cloud_pub_ = nh.advertise<sensor_msgs::PointCloud2>(
-      "plane_segmentation/objects_cloud", // 桌子上的物体点云
+      "plane_segmentation/objects_cloud", // Point cloud of objects on the table
       1);
 
   // Most PCL functions accept pointers as their arguments, as such we first set
@@ -82,25 +82,25 @@ bool PlaneSegmentation::preProcessCloud(CloudPtr& input, CloudPtr& output)
   if (!input || input->empty())
     return false;
 
-  // 1) VoxelGrid 下采样
+  // 1) VoxelGrid downsampling
   CloudPtr ds_cloud(new PointCloud);  // downsampled pointcloud
 
   pcl::VoxelGrid<PointT> vg;
   vg.setInputCloud(input);
-  vg.setLeafSize(0.01f, 0.01f, 0.01f);   // 1cm 体素
+  vg.setLeafSize(0.01f, 0.01f, 0.01f);   // 1 cm voxels
   vg.filter(*ds_cloud);
 
-  // 2) transform 到 base_frame
+  // 2) transform to base_frame
   CloudPtr transf_cloud(new PointCloud);  // expressed in base frame
 
   try
   {
-    // ⭐⭐ 关键修改：使用 Time(0) + 指定源坐标系 ⭐⭐
+    // Use Time(0) with an explicit source frame
     pcl_ros::transformPointCloud(
-        base_frame_,                 // 目标坐标系（base_link 或 base_footprint）
-        ros::Time(0),                // 使用 TF buffer 中最新的变换
+        base_frame_,                 // Target frame (base_link or base_footprint)
+        ros::Time(0),                // Use the latest transform from the TF buffer
         *ds_cloud,
-        ds_cloud->header.frame_id,   // 点云原来的 frame，一般是 xtion_rgb_optical_frame
+        ds_cloud->header.frame_id,   // Original point cloud frame, usually xtion_rgb_optical_frame
         *transf_cloud,
         tfListener_);
   }
@@ -110,11 +110,11 @@ bool PlaneSegmentation::preProcessCloud(CloudPtr& input, CloudPtr& output)
     return false;
   }
 
-  // 3) PassThrough 去掉地面以下的点
+  // 3) PassThrough to remove points below the ground
   pcl::PassThrough<PointT> pass;
   pass.setInputCloud(transf_cloud);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(0.01, 1.5);   // 保留 1cm~1.5m 之间的点
+  pass.setFilterLimits(0.01, 1.5);   // Keep points between 1 cm and 1.5 m
   pass.filter(*output);
 
   if (output->empty())
@@ -134,16 +134,16 @@ bool PlaneSegmentation::segmentCloud(CloudPtr& input,
   if (!input || input->empty())
     return false;
 
-  // ---------- 1) 用 RANSAC 拟合平面 ----------
+  // ---------- 1) Fit plane with RANSAC ----------
   pcl::SACSegmentation<PointT> seg;
   pcl::PointIndices::Ptr        inliers(new pcl::PointIndices);
   pcl::ModelCoefficients::Ptr   coefficients(new pcl::ModelCoefficients);
 
   seg.setOptimizeCoefficients(true);
-  seg.setModelType(pcl::SACMODEL_PLANE);   // 平面模型
+  seg.setModelType(pcl::SACMODEL_PLANE);   // Plane model
   seg.setMethodType(pcl::SAC_RANSAC);
   seg.setMaxIterations(1000);
-  seg.setDistanceThreshold(0.01);          // 1 cm 内视为在平面上
+  seg.setDistanceThreshold(0.01);          // Points within 1 cm are treated as on the plane
   seg.setProbability(0.99);
 
   seg.setInputCloud(input);
@@ -155,24 +155,24 @@ bool PlaneSegmentation::segmentCloud(CloudPtr& input,
     return false;
   }
 
-  // ---------- 2) 提取平面 inliers（桌面） ----------
+  // ---------- 2) Extract plane inliers (table surface) ----------
   pcl::ExtractIndices<PointT> extract;
   extract.setInputCloud(input);
   extract.setIndices(inliers);
 
-  extract.setNegative(false);   // 只要 inliers
-  extract.filter(*plane_cloud); // 写入桌面点云
+  extract.setNegative(false);   // Keep only inliers
+  extract.filter(*plane_cloud); // Write table point cloud
 
-  // ---------- 3) 利用平面方程，按“高度”挑选物体 ----------
+  // ---------- 3) Use plane equation to select objects by height ----------
   objects_cloud->clear();
 
   if (coefficients->values.size() < 4)
   {
     ROS_WARN("PlaneSegmentation: invalid plane coefficients, skip object extraction.");
-    return true;  // 桌面已经有了，物体就空着
+    return true;  // Table is already filled in; leave objects empty
   }
 
-  // 平面系数: a x + b y + c z + d = 0
+  // Plane coefficients: a x + b y + c z + d = 0
   const float a = coefficients->values[0];
   const float b = coefficients->values[1];
   const float c = coefficients->values[2];
@@ -186,31 +186,31 @@ bool PlaneSegmentation::segmentCloud(CloudPtr& input,
     return true;
   }
 
-  // 归一化后的法向量，用来计算“到平面的垂直距离”
+  // Normalized normal vector used to compute signed distance to the plane
   const float inv_norm = 1.0f / n_norm;
 
-  // 高度阈值，可按需要微调:
-  const float table_thickness = 0.01f;  // 平面厚度 1 cm
-  const float obj_min_height  = 0.02f;  // 至少高出桌面 2 cm
-  const float obj_max_height  = 0.25f;  // 不超过 25 cm，太高可能是背景
+  // Height thresholds; tweak as needed:
+  const float table_thickness = 0.01f;  // Plane thickness 1 cm
+  const float obj_min_height  = 0.02f;  // At least 2 cm above the table
+  const float obj_max_height  = 0.25f;  // No more than 25 cm; taller points may be background
 
-  // 遍历所有点，根据“离平面的高度”挑出物体
+  // Iterate all points and pick objects based on height above plane
   for (std::size_t i = 0; i < input->points.size(); ++i)
   {
     const PointT& p = input->points[i];
 
-    // 有些无效点（NaN）直接跳过
+    // Skip invalid points (NaN)
     if (!pcl::isFinite(p))
       continue;
 
-    // 到平面的有符号距离（沿法线方向）
+    // Signed distance to plane along the normal
     float dist = (a * p.x + b * p.y + c * p.z + d) * inv_norm;
 
-    // 绝对值很小的 -> 桌面本身（已经在 plane_cloud 里，不用管）
+    // Very small absolute value -> table surface (already in plane_cloud, ignore)
     if (std::fabs(dist) <= table_thickness)
       continue;
 
-    // 高于桌面的，并且在一个合理高度范围内 -> 认为是物体
+    // Above the table within a reasonable range -> treat as object
     if (dist > obj_min_height && dist < obj_max_height)
     {
       objects_cloud->points.push_back(p);

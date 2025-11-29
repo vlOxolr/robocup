@@ -1,0 +1,13 @@
+<launch>
+  <!-- 确保 WRS 的模型路径被加入 -->
+  <env name="GAZEBO_MODEL_PATH"
+       value="$(find tmc_wrs_gazebo_worlds)/models:$(optenv GAZEBO_MODEL_PATH)" />
+
+  <!-- 启动 Tiago + WRS 世界 -->
+  <include file="$(find tiago_gazebo)/launch/tiago_gazebo.launch">
+    <arg name="public_sim" value="true"/>
+    <arg name="robot" value="steel"/>
+    <arg name="gui" value="true"/>
+    <arg name="world" value="$(find tmc_wrs_gazebo_worlds)/worlds/wrs2020_fast.world"/>
+  </include>
+</launch>
