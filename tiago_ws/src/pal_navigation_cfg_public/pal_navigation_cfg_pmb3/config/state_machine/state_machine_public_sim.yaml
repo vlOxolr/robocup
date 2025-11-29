@@ -1,0 +1,5 @@
+robot: pmb3
+
+mapping: gmapping
+
+localization: amcl

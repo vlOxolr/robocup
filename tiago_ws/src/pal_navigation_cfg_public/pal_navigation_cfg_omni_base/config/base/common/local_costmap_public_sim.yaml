@@ -1,0 +1,58 @@
+# Independent settings for the local costmap
+local_costmap:
+  map_type: costmap
+
+  global_frame    : odom
+  robot_base_frame: base_footprint
+
+  update_frequency : 10.0
+  publish_frequency: 1.0
+
+  static_map    : false
+  rolling_window: true
+  width         : 4.0
+  height        : 4.0
+  resolution    : 0.025
+
+  footprint: [[ 0.35, 0.24], [-0.35, 0.24], [-0.35, -0.24], [ 0.35, -0.24]]
+
+  #plugins are loaded on a separate file
+
+  front_obstacle_laser_layer:
+    enabled: true
+    observation_sources: base_scan
+    combination_method: 1 # cannot erase static layer
+
+    base_scan:
+      sensor_frame: base_front_laser_link
+      data_type: LaserScan
+      topic: scan_front_raw
+      expected_update_rate: 0.3
+      observation_persistence: 0.0
+      inf_is_valid: true
+      marking: true
+      clearing: true
+      raytrace_range: 6.0
+      obstacle_range: 5.5
+
+  rear_obstacle_laser_layer:
+    enabled: true
+    observation_sources: base_scan
+    combination_method: 1 # cannot erase static layer
+
+    base_scan:
+      sensor_frame: base_rear_laser_link
+      data_type: LaserScan
+      topic: scan_rear_raw
+      expected_update_rate: 0.3
+      observation_persistence: 0.0
+      inf_is_valid: true
+      marking: true
+      clearing: true
+      raytrace_range: 6.0
+      obstacle_range: 5.5
+
+  inflation_layer:
+    enabled            : true
+    inflation_radius   : 0.7
+    cost_scaling_factor: 25.0

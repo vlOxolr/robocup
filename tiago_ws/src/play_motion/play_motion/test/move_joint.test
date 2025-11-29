@@ -1,0 +1,5 @@
+<launch>
+  <!-- move_joint test -->
+  <test test-name="move_joint_test" pkg="play_motion" type="move_joint_test.py"/>
+
+</launch>

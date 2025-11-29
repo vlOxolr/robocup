@@ -1,0 +1,5 @@
+robot: tiago_dual
+
+mapping: gmapping
+
+localization: amcl
