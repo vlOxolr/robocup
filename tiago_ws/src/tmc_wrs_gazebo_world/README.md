@@ -1,6 +1,5 @@
 # RoboCup@Home Tutorial 5
 
-
 ## Launch rviz and Gazebo
 
 ```bash
@@ -10,33 +9,45 @@ source devel/setup.bash
 roslaunch tiago_2dnav_gazebo tiago_navigation.launch public_sim:=true world:=wrs2020 gzpose:="-x -1.565665 -y 0.576238 -z 0.0 -Y 0.398122" map:=/tiago_ws/src/tmc_wrs_gazebo_world/maps/wrs2020
 
 # in new terminal
-roslaunch tiago_moveit_config moveit_planning_execution.launch   public_sim:=true pipeline:=ompl
+roslaunch tiago_moveit_config moveit_planning_execution.launch public_sim:=true pipeline:=ompl
 ```
 
-
-## State Machine
+## Move object
 
 ```bash
 roslaunch tiago_task task_orchestrator.launch 
 ```
 
-### 1 target navigation
+### 1 target navigation (abandoned)
 
 ```bash
-roslaunch tiago_moveit_config moveit_planning_execution.launch \
-  public_sim:=true pipeline:=ompl
-
+roslaunch tiago_moveit_config moveit_planning_execution.launch public_sim:=true pipeline:=ompl
 
 roslaunch tiago_move tiago_move_1tg.launch
 ```
 
-## Look down
+### Vision
 
 ```bash
+roslaunch object_detection_world tiago.launch world_suffix:=wrs2020 robot_pos:="-x -1.565665 -y 0.576238 -z 0.0 -Y 0.398122"
+
+roslaunch object_detection object_detection.launch image:="/xtion/rgb/image_raw"
+
+# look down
 rostopic pub /head_controller/command trajectory_msgs/JointTrajectory "
 joint_names: ['head_1_joint', 'head_2_joint']
 points:
-- positions: [0.0, -0.6]
+- positions: [0.0, 0.6]
   time_from_start: {secs: 2}
 " -1
+
+
+```
+
+## Connect containers
+
+```bash
+docker network create ros_net
+docker network connect ros_net ros_container
+docker network connect ros_net yolo_container
 ```
