@@ -31,7 +31,7 @@ namespace tiago_move
 
       move_base_msgs::MoveBaseGoal createGoal(std::vector<double>&);
 
-      // Ex4: 关节/末端执行器目标（x y z r p y）
+      std::vector<double> target_position;
       std::vector<double> target_pose;
 
       //#>>>>TODO:Exercise3 Creates a SimpleActionClient that communicate with the move_base action server.

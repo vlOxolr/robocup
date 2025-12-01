@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="tiago_task"
+        type="task_orchestrator.py"
+        name="task_orchestrator"
+        output="screen"/>
+</launch>
