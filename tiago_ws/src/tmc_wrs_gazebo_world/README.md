@@ -12,7 +12,7 @@ roslaunch tiago_2dnav_gazebo tiago_navigation.launch public_sim:=true world:=wrs
 roslaunch tiago_moveit_config moveit_planning_execution.launch public_sim:=true pipeline:=ompl
 ```
 
-## Move object
+## Whole task
 
 ```bash
 roslaunch tiago_task task_orchestrator.launch 
