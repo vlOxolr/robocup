@@ -31,7 +31,7 @@ roslaunch tiago_move tiago_move_1tg.launch
 ```bash
 roslaunch object_detection_world tiago.launch world_suffix:=wrs2020 robot_pos:="-x -1.565665 -y 0.576238 -z 0.0 -Y 0.398122"
 
-roslaunch object_detection object_detection.launch image:="/xtion/rgb/image_raw"
+roslaunch object_detection object_detection.launch
 
 # look down
 rostopic pub /head_controller/command trajectory_msgs/JointTrajectory "
