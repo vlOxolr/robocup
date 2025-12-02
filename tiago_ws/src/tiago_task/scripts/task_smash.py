@@ -44,8 +44,8 @@ def main():
     nav = NavigationClient()
 
     # 目标点
-    table_A = [0.366, -0.534, -0.524]
-    table_B = [-0.821, -0.468, 2.617]
+    table_A = [0.366, -0.334, -0.324]
+    table_B = [-0.721, -0.368, 2.617]
 
     sm = smach.StateMachine(outcomes=['DONE', 'FAILED'])
 
