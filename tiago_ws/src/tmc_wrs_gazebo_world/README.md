@@ -43,6 +43,28 @@ roslaunch object_detection_world tiago.launch world_suffix:=wrs2020 robot_pos:="
 roslaunch object_detection object_detection.launch
 ```
 
+## Build communication between 2 containers
+
+In ros container:
+
+```bash
+export ROS_MASTER_URI=http://ros_container:11311
+export ROS_HOSTNAME=ros_container
+```
+
+In cuda container:
+
+```bash
+export ROS_MASTER_URI=http://ros_container:11311
+export ROS_HOSTNAME=yolo_container
+```
+
+## Enable YOLO
+
+```bash
+roslaunch object_detection object_detection.launch image:="/xtion/rgb/image_raw"
+```
+
 ## Whole task
 
 ```bash
