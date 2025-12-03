@@ -65,6 +65,20 @@ export ROS_HOSTNAME=yolo_container
 roslaunch object_detection object_detection.launch image:="/xtion/rgb/image_raw"
 ```
 
+## Enable segmentation
+
+```bash
+rosrun plane_segmentation plane_segmentation_node
+rosrun object_labeling object_labeling_node
+```
+
+## Enable gripper planning
+
+```bash
+roslaunch tiago_pick_demo pick_demo.launch
+
+```
+
 ## Whole task
 
 ```bash
