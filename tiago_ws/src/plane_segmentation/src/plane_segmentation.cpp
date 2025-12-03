@@ -123,6 +123,35 @@ bool PlaneSegmentation::preProcessCloud(CloudPtr& input, CloudPtr& output)
     return false;
   }
 
+  // 4) Filter points by distance from robot (1.0m range)
+  CloudPtr distance_filtered(new PointCloud);
+  const float max_distance = 1.0f;  // Maximum distance from robot in meters
+  const float max_distance_sq = max_distance * max_distance;
+
+  for (const auto& point : output->points)
+  {
+    // Calculate xy distance from robot origin
+    float xy_distance_sq = point.x * point.x + point.y * point.y;
+    
+    if (xy_distance_sq <= max_distance_sq)
+    {
+      distance_filtered->points.push_back(point);
+    }
+  }
+
+  distance_filtered->width = static_cast<uint32_t>(distance_filtered->points.size());
+  distance_filtered->height = 1;
+  distance_filtered->is_dense = false;
+  distance_filtered->header = output->header;
+
+  if (distance_filtered->empty())
+  {
+    ROS_WARN("preProcessCloud: output cloud is empty after distance filtering");
+    return false;
+  }
+
+  *output = *distance_filtered;
+
   return true;
 }
 
