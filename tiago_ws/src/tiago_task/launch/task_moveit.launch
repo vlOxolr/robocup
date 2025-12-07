@@ -6,5 +6,8 @@
   <arg name="publish_monitored_planning_scene" value="true" />
   <arg name="end_effector" value="pal-gripper" />
  </include>
-
+# The visualization component of MoveIt!
+ <include file="$(find tiago_moveit_config)/launch/moveit_rviz.launch">
+    <arg name="config" value="true" />
+ </include>
 </launch>
