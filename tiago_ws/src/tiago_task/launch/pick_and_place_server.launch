@@ -1,0 +1,20 @@
+<launch>
+  <!-- 启动基于 MoveIt 的抓取 Action Server: /pickup_pose -->
+  <node pkg="tiago_pick_demo"
+        type="pick_and_place_server.py"
+        name="pick_and_place_server"
+        output="screen">
+
+    <!-- 物体尺寸（单位：米），按瓶子的实际大小自己微调 -->
+    <param name="object_height" value="0.20" />  <!-- 瓶子高度 -->
+    <param name="object_width"  value="0.11" />  <!-- x 方向尺寸 -->
+    <param name="object_depth"  value="0.11" />  <!-- y 方向尺寸 -->
+
+    <!-- 允许接触的末端执行器连杆名，跟机器人 URDF / 官方 demo 保持一致 -->
+    <rosparam param="links_to_allow_contact">
+      - arm_tool_link
+      - gripper_left_finger_link
+      - gripper_right_finger_link
+    </rosparam>
+  </node>
+</launch>

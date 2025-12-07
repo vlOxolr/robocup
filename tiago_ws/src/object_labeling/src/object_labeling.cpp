@@ -263,6 +263,12 @@ bool ObjectLabeling::initalize(ros::NodeHandle& nh)
       "/text_markers",
       1);
 
+  //////////////////////////////////////////////////////////////////////////////
+  item_marker_pub_ = nh.advertise<visualization_msgs::MarkerArray>(
+    "/item_markers",
+    1);
+
+
   
   object_point_cloud_.reset(new PointCloud);    // 未标注的 objects cloud
   labeled_point_cloud_.reset(new PointCloudl);  // 已标注的 objects cloud
@@ -305,6 +311,7 @@ void ObjectLabeling::update(const ros::Time& time)
     
     ////////////////////////////////////////////////////////////////////////////
     text_marker_pub_.publish(text_markers_);
+    item_marker_pub_.publish(item_markers_);
   }
 }
 
@@ -486,6 +493,78 @@ bool ObjectLabeling::labelObjects(CloudPtr& input, CloudPtrl& output)
     marker.header.stamp    = ros::Time::now();
 
     text_markers_.markers[i] = marker;
+  }
+
+    //==========================
+  // 9) 为每个聚类生成 CUBE 包围盒 item_markers_
+  //==========================
+  item_markers_.markers.clear();
+  item_markers_.markers.resize(cluster_indices.size());
+
+  for (size_t i = 0; i < cluster_indices.size(); ++i)
+  {
+    const auto& indices = cluster_indices[i];
+    if (indices.indices.empty())
+      continue;
+
+    // 计算该聚类的点云 AABB（轴对齐包围盒）
+    double min_x =  std::numeric_limits<double>::infinity();
+    double min_y =  std::numeric_limits<double>::infinity();
+    double min_z =  std::numeric_limits<double>::infinity();
+    double max_x = -std::numeric_limits<double>::infinity();
+    double max_y = -std::numeric_limits<double>::infinity();
+    double max_z = -std::numeric_limits<double>::infinity();
+
+    for (int idx : indices.indices)
+    {
+      const PointT& p = input->points[idx];
+      if (p.x < min_x) min_x = p.x;
+      if (p.y < min_y) min_y = p.y;
+      if (p.z < min_z) min_z = p.z;
+      if (p.x > max_x) max_x = p.x;
+      if (p.y > max_y) max_y = p.y;
+      if (p.z > max_z) max_z = p.z;
+    }
+
+    // 中心和尺寸
+    double cx = 0.5 * (min_x + max_x);
+    double cy = 0.5 * (min_y + max_y);
+    double cz = 0.5 * (min_z + max_z);
+
+    double sx = std::max(0.01, max_x - min_x);
+    double sy = std::max(0.01, max_y - min_y);
+    double sz = std::max(0.01, max_z - min_z);
+
+    visualization_msgs::Marker box;
+    box.header.frame_id = input->header.frame_id;
+    box.header.stamp    = ros::Time::now();
+    box.ns              = assigned_classes[i];
+    box.id              = static_cast<int>(i);
+
+    box.type   = visualization_msgs::Marker::CUBE;
+    box.action = visualization_msgs::Marker::ADD;
+
+    box.pose.position.x = cx;
+    box.pose.position.y = cy;
+    box.pose.position.z = cz;
+
+    // 不考虑旋转，直接做轴对齐 CUBE
+    box.pose.orientation.x = 0.0;
+    box.pose.orientation.y = 0.0;
+    box.pose.orientation.z = 0.0;
+    box.pose.orientation.w = 1.0;
+
+    box.scale.x = sx;
+    box.scale.y = sy;
+    box.scale.z = sz;
+
+    // 颜色：统一蓝色半透明，你可以按 label 分颜色
+    box.color.a = 0.4;
+    box.color.r = 0.0;
+    box.color.g = 0.0;
+    box.color.b = 1.0;
+
+    item_markers_.markers[i] = box;
   }
 
   return true;

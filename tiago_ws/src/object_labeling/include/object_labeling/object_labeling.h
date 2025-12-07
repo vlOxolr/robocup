@@ -141,10 +141,12 @@ private:
 
   ros::Publisher labeled_object_cloud_pub_; //!< publisher for labeled pointcloud
   ros::Publisher text_marker_pub_;
+  ros::Publisher item_marker_pub_;
 
   // outputs
   CloudPtrl labeled_point_cloud_;                 //!< labeled pointcloud (pointcloud that knows the object type)
   visualization_msgs::MarkerArray text_markers_;  //!< text markers for rviz
+  visualization_msgs::MarkerArray item_markers_;
 
   // inputs 
   CloudPtr object_point_cloud_;                             //!< objects point cloud
