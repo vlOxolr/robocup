@@ -22,7 +22,7 @@ Terminal 2:
 roslaunch tiago_task task_moveit.launch public_sim:=true pipeline:=ompl
 ```
 
-### Reminder
+##### Reminder
 
 (developing only)
 
@@ -79,6 +79,12 @@ rosrun object_labeling object_labeling_node
 ```
 
 ## Enable gripper planning
+
+```bash
+roslaunch tiago_task pick_and_place_server.launch
+```
+
+old
 
 ```bash
 roslaunch tiago_pick_demo pick_demo.launch
