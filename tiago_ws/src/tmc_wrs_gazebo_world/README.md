@@ -5,7 +5,7 @@
 Terminal 1:
 
 ```bash
-roslaunch tiago_task tiago_nav_vision.launch map:=/tiago_ws/src/tmc_wrs_gazebo_world/maps/wrs2020
+roslaunch tiago_task tiago_nav_vision.launch map:=/tiago_ws/src/tmc_wrs_gazebo_world/maps/wrs2020 end_effector:=pal-gripper
 
 # look down
 rostopic pub /head_controller/command trajectory_msgs/JointTrajectory "
