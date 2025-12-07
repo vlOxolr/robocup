@@ -19,7 +19,7 @@ points:
 Terminal 2:
 
 ```bash
-roslaunch tiago_moveit_config moveit_planning_execution.launch public_sim:=true pipeline:=ompl
+roslaunch tiago_task task_moveit.launch public_sim:=true pipeline:=ompl
 ```
 
 ### Reminder
@@ -41,6 +41,12 @@ roslaunch tiago_moveit_config moveit_planning_execution.launch public_sim:=true 
 roslaunch object_detection_world tiago.launch world_suffix:=wrs2020 robot_pos:="-x -1.565665 -y 0.576238 -z 0.0 -Y 0.398122"
 
 roslaunch object_detection object_detection.launch
+```
+
+old moveit launcher
+
+```bash
+roslaunch tiago_moveit_config moveit_planning_execution.launch public_sim:=true pipeline:=ompl
 ```
 
 ## Build communication between 2 containers
@@ -76,7 +82,6 @@ rosrun object_labeling object_labeling_node
 
 ```bash
 roslaunch tiago_pick_demo pick_demo.launch
-
 ```
 
 ## Whole task
