@@ -314,7 +314,7 @@ def main():
     nav = NavigationClient()
 
     # 桌子 A / B 的导航目标
-    table_A = [0.5, -0.54, -0.524]
+    table_A = [0.28, -0.39, -0.524]
     table_B = [-0.821, -0.468, 2.617]
 
     sm = smach.StateMachine(outcomes=["DONE", "FAILED"])

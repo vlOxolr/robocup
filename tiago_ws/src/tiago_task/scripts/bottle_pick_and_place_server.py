@@ -176,7 +176,7 @@ class BottlePickServer(object):
                             self.object_height))
 
         # ------- 添加 "table" -------
-        """
+        
         table_pose = deepcopy(obj_pose)
 
         # 假设物体放在桌面上：
@@ -200,7 +200,7 @@ class BottlePickServer(object):
                            table_pose,
                            (table_size_x,
                             table_size_y,
-                            table_height))"""
+                            table_height))
 
         # 等待两者进入 planning scene
         self.wait_for_planning_scene_object("part")

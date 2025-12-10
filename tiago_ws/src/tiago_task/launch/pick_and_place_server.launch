@@ -12,9 +12,11 @@
 
     <!-- 允许接触的末端执行器连杆，根据你机器人实际 link 名字调整 -->
     <rosparam param="links_to_allow_contact">
-      - arm_tool_link
+      - gripper_link
       - gripper_left_finger_link
       - gripper_right_finger_link
+      <!-- - gripper_left_finger_link -->
+      <!-- - gripper_right_finger_link -->
     </rosparam>
 
   </node>
