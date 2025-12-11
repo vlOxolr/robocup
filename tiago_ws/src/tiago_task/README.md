@@ -4,6 +4,15 @@
 
 Bangdong Zhang & Shuowen Li
 
+## Startup
+
+run following commands in every terminal.
+
+```bash
+source /opt/ros/noetic/setup.bash
+source devel/setup.bash
+```
+
 ## Launch rviz and Gazebo
 
 Terminal 1:
