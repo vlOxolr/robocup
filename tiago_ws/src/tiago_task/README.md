@@ -98,6 +98,9 @@ Terminal 7:
 roslaunch tiago_task task_smash.launch 
 ```
 
+You can also see the attached video (task_1_move_between_tables.webm).
+
+
 ## Task 2: find bottle in office
 
 Terminal 7:
@@ -105,3 +108,5 @@ Terminal 7:
 ```bash
 roslaunch tiago_task task_finder.launch 
 ```
+
+You can also see the attached video (task_2_bottle_found.webm and task_2_bottle_not_found.webm).
