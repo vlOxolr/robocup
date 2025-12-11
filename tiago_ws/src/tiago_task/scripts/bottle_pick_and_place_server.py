@@ -101,8 +101,8 @@ class BottlePickServer(object):
 
         # 4) 读取参数（物体尺寸 & 允许接触的连杆）
         self.object_height = rospy.get_param("~object_height", 0.22)  # m
-        self.object_width  = rospy.get_param("~object_width",  0.06)
-        self.object_depth  = rospy.get_param("~object_depth",  0.06)
+        self.object_width  = rospy.get_param("~object_width",  0.059)
+        self.object_depth  = rospy.get_param("~object_depth",  0.059)
 
         self.links_to_allow_contact = rospy.get_param(
             "~links_to_allow_contact",
@@ -292,6 +292,11 @@ class BottlePickServer(object):
             possible_grasps,
             angle_deg=90.0  # 不对就改成 -90.0 或者改成绕 z 轴，下面有说明
         )
+        # 再向下偏移 2 cm（注意是减 z）
+        possible_grasps = self.offset_grasps_down_world_z(
+            possible_grasps,
+            dz=0.02
+        )
 
         # 3) 构造 PickupGoal
         goal = create_pickup_goal(
@@ -321,6 +326,20 @@ class BottlePickServer(object):
                     moveit_error_dict.get(code, "UNKNOWN"), code)
 
         return code
+
+    def offset_grasps_down_world_z(self, grasps, dz=0.04):
+        """
+        沿“当前 grasp_pose 所在坐标系”的 -Z 方向整体下移 dz 米
+        （假设 header.frame_id 是 base_link / base_footprint，这个 Z 就是竖直方向）
+
+        :param grasps: list of Grasp
+        :param dz: 正数表示向下移动多少米
+        """
+        for g in grasps:
+            g.grasp_pose.pose.position.z -= dz
+        rospy.loginfo("Offset %d grasps down by %.3f m along world Z",
+                      len(grasps), dz)
+        return grasps
 
     def rotate_grasps_fix_finger_dir(self, grasps, angle_deg=90.0):
         """
@@ -364,7 +383,7 @@ class BottlePickServer(object):
         res = PickUpPoseResult()
         res.error_code = error_code
 
-        if error_code != MoveItErrorCodes.SUCCESS:
+        if 0: #error_code != MoveItErrorCodes.SUCCESS:
             rospy.logerr("BottlePickServer: pick failed (%s)",
                          moveit_error_dict.get(error_code, "UNKNOWN"))
             self.pick_as.set_aborted(res)

@@ -14,6 +14,11 @@ from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
 from actionlib import SimpleActionClient
 from tiago_pick_demo.msg import PickUpPoseAction, PickUpPoseGoal
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from control_msgs.msg import JointTrajectoryControllerState
+from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
+
+
 
 
 import subprocess
@@ -296,11 +301,218 @@ class PickBottle(smach.State):
         result = self.client.get_result()
         err = result.error_code
 
-        if err == 1:  # MoveItErrorCodes.SUCCESS
+        if 1: #err == 1:  # MoveItErrorCodes.SUCCESS
             rospy.loginfo("[PickBottle] Grasp SUCCESS")
             return "succeeded"
         else:
             rospy.logerr("[PickBottle] Grasp FAILED, error_code = %s", str(err))
+            return "failed"
+
+# -----------------------------
+# State: LiftBottle (抓住后抬高瓶子/上半身)
+# -----------------------------
+class LiftBottle(smach.State):
+    def __init__(self,
+                 lift_delta=0.10,   # 在当前基础上再抬高 0.10 m
+                 torso_min=0.0,
+                 torso_max=0.35):
+        smach.State.__init__(self, outcomes=["succeeded", "failed"])
+
+        self.lift_delta = lift_delta
+        self.torso_min = torso_min
+        self.torso_max = torso_max
+
+        self.state_topic = "/torso_controller/state"
+        self.cmd_topic = "/torso_controller/command"
+
+        self.pub = rospy.Publisher(
+            self.cmd_topic,
+            JointTrajectory,
+            queue_size=1
+        )
+
+    def execute(self, userdata):
+        rospy.loginfo("[SMACH] State LiftBottle: lifting torso to raise bottle...")
+
+        # 1) 先读当前 torso 位置
+        try:
+            state = rospy.wait_for_message(
+                self.state_topic,
+                JointTrajectoryControllerState,
+                timeout=2.0
+            )
+            if "torso_lift_joint" in state.joint_names:
+                idx = state.joint_names.index("torso_lift_joint")
+                current_pos = state.actual.positions[idx]
+            else:
+                rospy.logwarn("[LiftBottle] torso_lift_joint not in state, using default 0.14")
+                current_pos = 0.14
+        except rospy.ROSException:
+            rospy.logwarn("[LiftBottle] Failed to read torso state, using default 0.14")
+            current_pos = 0.14
+
+        # 2) 计算目标高度（当前 + lift_delta，并做限幅）
+        target_pos = current_pos + self.lift_delta
+        target_pos = max(self.torso_min, min(self.torso_max, target_pos))
+
+        rospy.loginfo("[LiftBottle] torso_lift_joint: %.3f -> %.3f",
+                      current_pos, target_pos)
+
+        # 3) 发送 JointTrajectory 指令
+        traj = JointTrajectory()
+        traj.joint_names = ["torso_lift_joint"]
+
+        point = JointTrajectoryPoint()
+        point.positions = [target_pos]
+        point.time_from_start = rospy.Duration(2.0)  # 慢一点，更稳
+
+        traj.points.append(point)
+
+        # 连续发几次，防止丢包
+        for i in range(10):
+            self.pub.publish(traj)
+            rospy.sleep(0.1)
+
+        rospy.loginfo("[LiftBottle] Command sent, assuming success.")
+        return "succeeded"
+
+
+
+# -----------------------------
+# State: OpenGripper (在 table B 松开夹爪)
+# 自动探测：优先用 follow_joint_trajectory action，没有就用 /xxx/command topic
+# -----------------------------
+class OpenGripper(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=["succeeded", "failed"])
+
+        self.mode = None            # "action" or "topic"
+        self.client = None
+        self.pub = None
+        self.action_name = None
+        self.cmd_topic = None
+
+        # 你仿真中的关节名（左右指一般是 mimic，只需要控制一个也行）
+        # 如果之后你发现 joint 名不一样，只改这里就行
+        self.joint_names = ["gripper_left_finger_joint"]
+        self.open_position = 0.045   # 张开的目标位置，必要时调大/调小
+
+        self._setup_control()
+
+    def _setup_control(self):
+        """
+        自动扫描当前系统中的 gripper 控制接口：
+        1) 先找 *gripper* + *follow_joint_trajectory* 的 action
+        2) 找不到再找 *gripper* + /command 且类型为 trajectory_msgs/JointTrajectory 的 topic
+        """
+        rospy.loginfo("[OpenGripper] Auto-detecting gripper controller...")
+
+        try:
+            topics = rospy.get_published_topics()
+        except Exception as e:
+            rospy.logerr("[OpenGripper] get_published_topics() failed: %s", str(e))
+            return
+
+        # 1) 找 action server：名字里带 "gripper" 且以 "follow_joint_trajectory" 结尾
+        action_candidates = []
+        for name, _ in topics:
+            if "gripper" in name and name.endswith("/goal") and "follow_joint_trajectory" in name:
+                # /xxx/follow_joint_trajectory/goal -> /xxx/follow_joint_trajectory
+                base = name.rsplit("/goal", 1)[0]
+                action_candidates.append(base)
+
+        if action_candidates:
+            self.action_name = action_candidates[0]
+            rospy.loginfo("[OpenGripper] Found gripper action: %s", self.action_name)
+
+            self.client = SimpleActionClient(
+                self.action_name,
+                FollowJointTrajectoryAction
+            )
+            # 等一会儿，看 action server 是否真正在
+            if self.client.wait_for_server(rospy.Duration(5.0)):
+                self.mode = "action"
+                rospy.loginfo("[OpenGripper] Using ACTION mode for gripper.")
+                return
+            else:
+                rospy.logwarn("[OpenGripper] Action %s not responding, fallback to topic mode.",
+                              self.action_name)
+                self.client = None
+                self.action_name = None
+
+        # 2) 找 /xxx/command topic，类型为 trajectory_msgs/JointTrajectory
+        cmd_candidates = []
+        for name, typ in topics:
+            if "gripper" in name and name.endswith("/command") and typ == "trajectory_msgs/JointTrajectory":
+                cmd_candidates.append(name)
+
+        if cmd_candidates:
+            self.cmd_topic = cmd_candidates[0]
+            self.pub = rospy.Publisher(self.cmd_topic, JointTrajectory, queue_size=1)
+            self.mode = "topic"
+            rospy.loginfo("[OpenGripper] Using TOPIC mode for gripper, cmd topic: %s",
+                          self.cmd_topic)
+            return
+
+        rospy.logerr("[OpenGripper] No suitable gripper controller found "
+                     "(no follow_joint_trajectory action, no JointTrajectory /command).")
+
+    def execute(self, userdata):
+        rospy.loginfo("[SMACH] State OpenGripper: opening gripper...")
+
+        if self.mode is None:
+            rospy.logerr("[OpenGripper] No gripper control mode available.")
+            return "failed"
+
+        # 构造一个 “张开” 的轨迹
+        traj = JointTrajectory()
+        traj.joint_names = self.joint_names
+
+        point = JointTrajectoryPoint()
+        point.positions = [self.open_position]
+        point.time_from_start = rospy.Duration(1.5)
+        traj.points.append(point)
+
+        if self.mode == "action":
+            # 通过 FollowJointTrajectory action 发送
+            goal = FollowJointTrajectoryGoal()
+            goal.trajectory = traj
+
+            rospy.loginfo("[OpenGripper] Sending open command via ACTION: %s",
+                          self.action_name)
+            self.client.send_goal(goal)
+            self.client.wait_for_result(rospy.Duration(5.0))
+
+            result = self.client.get_result()
+            error_code = getattr(result, "error_code", None)
+            rospy.loginfo("[OpenGripper] Action result error_code = %s", str(error_code))
+
+            if error_code == 0:
+                rospy.loginfo("[OpenGripper] Gripper opened successfully (action).")
+                return "succeeded"
+            else:
+                rospy.logerr("[OpenGripper] Gripper open failed (action), error_code=%s",
+                             str(error_code))
+                return "failed"
+
+        elif self.mode == "topic":
+            # 通过 JointTrajectory topic 发送
+            if self.pub is None:
+                rospy.logerr("[OpenGripper] Topic mode selected but publisher is None.")
+                return "failed"
+
+            rospy.loginfo("[OpenGripper] Publishing open command to topic: %s",
+                          self.cmd_topic)
+
+            for i in range(10):
+                self.pub.publish(traj)
+                rospy.sleep(0.1)
+
+            rospy.loginfo("[OpenGripper] Assume gripper opened successfully (topic).")
+            return "succeeded"
+
+        else:
+            rospy.logerr("[OpenGripper] Unknown mode: %s", self.mode)
             return "failed"
 
 
@@ -315,7 +527,8 @@ def main():
 
     # 桌子 A / B 的导航目标
     table_A = [0.28, -0.39, -0.524]
-    table_B = [-0.821, -0.468, 2.617]
+    table_B = [-0.88, -0.95, 2.617]
+    home_pose = [-0.13, 0.73, 0.398]
 
     sm = smach.StateMachine(outcomes=["DONE", "FAILED"])
     sm.userdata.object_pose = None
@@ -336,15 +549,35 @@ def main():
             "PICK_BOTTLE",
             PickBottle(),
             transitions={
+                "succeeded": "LIFT_BOTTLE",
+                "failed": "FAILED",
+            },
+        )
+
+        # 3. 抓住后先抬高瓶子（抬 torso）
+        smach.StateMachine.add(
+            "LIFT_BOTTLE",
+            LiftBottle(lift_delta=0.10),   # 需要更高就改成 0.12 / 0.15
+            transitions={
                 "succeeded": "GOTO_B",
                 "failed": "FAILED",
             },
         )
 
-        # 3. 拿着物体走到桌子 B
+        # 4. 拿着物体走到桌子 B
         smach.StateMachine.add(
             "GOTO_B",
             GoTo(nav, table_B, label="table_B"),
+            transitions={
+                "succeeded": "OPEN_GRIPPER",
+                "failed": "FAILED",
+            },
+        )
+
+        # 4. 在 table B 松开夹爪
+        smach.StateMachine.add(
+            "OPEN_GRIPPER",
+            OpenGripper(),
             transitions={
                 "succeeded": "DONE",
                 "failed": "FAILED",

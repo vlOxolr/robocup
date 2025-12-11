@@ -8,6 +8,7 @@ project(tiago_task)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  dynamic_reconfigure
   actionlib
   geometry_msgs
   rospy
@@ -73,6 +74,10 @@ find_package(catkin REQUIRED COMPONENTS
 #   DEPENDENCIES
 #   geometry_msgs#   std_msgs
 # )
+
+generate_dynamic_reconfigure_options(
+  cfg/SphericalGrasp.cfg
+  )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##

@@ -11,9 +11,17 @@ class NavigationClient(object):
     调度器级 NavigationClient
     """
 
-    def __init__(self, pkg="tiago_move", launch_file="tiago_move_1tg.launch"):
+    def __init__(self,
+                 pkg="tiago_move",
+                 launch_file="tiago_move_1tg.launch",
+                 max_lin_vel=0.20,      # 最大线速度 (m/s)
+                 max_ang_vel=0.40):     # 最大角速度 (rad/s)
         self.pkg = pkg
         self.launch_file = launch_file
+
+        # 这里保存一下速度限制，后面 goto() 里用
+        self.max_lin_vel = max_lin_vel
+        self.max_ang_vel = max_ang_vel
 
     def goto(self, x, y, yaw):
         """
