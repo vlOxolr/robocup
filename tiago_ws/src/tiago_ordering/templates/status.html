@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Order Status</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; max-width: 720px; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
+    .muted { color: #666; font-size: 12px; }
+    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Order Status</h2>
+  <div class="card">
+    <div><b>Table:</b> {{ table_id }}</div>
+    <div><b>Order ID:</b> {{ order_id }}</div>
+    <div><b>Status:</b> <span id="st">{{ status }}</span></div>
+    <div class="muted">Auto refresh every 2 seconds.</div>
+  </div>
+
+  <div class="card">
+    <b>Items</b>
+    <pre id="items">{{ items_pre }}</pre>
+    <b>Special request</b>
+    <pre>{{ special_request }}</pre>
+  </div>
+
+<script>
+async function refresh() {
+  const r = await fetch("{{ url_for('api_status', table_id=table_id) }}");
+  if (!r.ok) return;
+  const j = await r.json();
+  if (!j.ok) return;
+  document.getElementById("st").innerText = j.status;
+}
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import rospy
 import uuid
 from threading import Lock
 from datetime import datetime
 
-from flask import Flask, request, redirect, url_for, render_template_string
+from flask import Flask, request, redirect, url_for, render_template
 
 from tiago_ordering.msg import Order, OrderItem
 from tiago_ordering.srv import Reserve, ReserveRequest
@@ -19,129 +20,6 @@ STATUS_SERVING   = "SERVING"
 STATUS_SERVED    = "SERVED"
 
 ACTIVE_STATUSES = {STATUS_CREATED, STATUS_CONFIRMED, STATUS_SERVING}
-
-MENU_HTML = """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Table {{table_id}} - Menu</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 18px; max-width: 720px; }
-    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
-    .row { display: flex; gap: 10px; align-items: center; }
-    input[type=number] { width: 72px; padding: 4px; }
-    textarea { width: 100%; height: 72px; }
-    button { padding: 10px 14px; border: none; border-radius: 8px; cursor: pointer; }
-    .btn { background: #222; color: white; }
-    .muted { color: #666; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <h2>Table {{table_id}} - Menu</h2>
-  <p class="muted">Submit once. Re-scan QR will show status if an active order exists.</p>
-
-  <form method="POST" action="{{ url_for('submit_order', table_id=table_id) }}">
-    {% for name in menu_items %}
-      <div class="card">
-        <div class="row">
-          <div style="flex:1;"><b>{{name}}</b></div>
-          <div>
-            Qty:
-            <input type="number" min="0" max="99" name="qty_{{name}}" value="0"/>
-          </div>
-        </div>
-      </div>
-    {% endfor %}
-
-    <div class="card">
-      <div><b>Special request</b></div>
-      <textarea name="special_request" placeholder="e.g., no ice, less sugar..."></textarea>
-    </div>
-
-    <button class="btn" type="submit">Submit Order</button>
-  </form>
-</body>
-</html>
-"""
-
-RESULT_HTML = """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Order Result</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 18px; max-width: 720px; }
-    .ok { color: #0a7; }
-    .bad { color: #c33; }
-    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
-    .muted { color: #666; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <h2>Order Result</h2>
-
-  {% if ok %}
-    <p class="ok"><b>Success.</b> Order received.</p>
-  {% else %}
-    <p class="bad"><b>Failed.</b> {{reason}}</p>
-  {% endif %}
-
-  <div class="card">
-    <div><b>Table:</b> {{table_id}}</div>
-    <div><b>Order ID:</b> {{order_id}}</div>
-    <div><b>Status:</b> {{status}}</div>
-    <div class="muted">Re-scan QR to view status page.</div>
-  </div>
-
-  <a href="{{ url_for('table_entry', table_id=table_id) }}">Back</a>
-</body>
-</html>
-"""
-
-STATUS_HTML = """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Order Status</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 18px; max-width: 720px; }
-    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
-    .muted { color: #666; font-size: 12px; }
-    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; }
-  </style>
-</head>
-<body>
-  <h2>Order Status</h2>
-  <div class="card">
-    <div><b>Table:</b> {{table_id}}</div>
-    <div><b>Order ID:</b> {{order_id}}</div>
-    <div><b>Status:</b> <span id="st">{{status}}</span></div>
-    <div class="muted">Auto refresh every 2 seconds.</div>
-  </div>
-
-  <div class="card">
-    <b>Items</b>
-    <pre id="items">{{items_pre}}</pre>
-    <b>Special request</b>
-    <pre>{{special_request}}</pre>
-  </div>
-
-<script>
-async function refresh() {
-  const r = await fetch("{{ url_for('api_status', table_id=table_id) }}");
-  if (!r.ok) return;
-  const j = await r.json();
-  if (!j.ok) return;
-  document.getElementById("st").innerText = j.status;
-}
-setInterval(refresh, 2000);
-</script>
-</body>
-</html>
-"""
 
 class OrderStore:
     def __init__(self):
@@ -193,7 +71,9 @@ def now_iso():
 
 class WebOrderServer:
     def __init__(self):
-        self.app = Flask(__name__)
+        pkg_dir = os.path.dirname(os.path.abspath(__file__))          # .../scripts
+        templates_dir = os.path.join(os.path.dirname(pkg_dir), "templates")  # .../templates
+        self.app = Flask(__name__, template_folder=templates_dir)
         self.store = OrderStore()
 
         self.menu_items = [str(x) for x in rospy.get_param("~menu_items", ["cola", "water"])]
@@ -226,7 +106,7 @@ class WebOrderServer:
                     return redirect(url_for("status_page", order_id=active_id))
                 self.store.clear_active_if_matches(table_id, active_id)
 
-            return render_template_string(MENU_HTML, table_id=table_id, menu_items=self.menu_items)
+            return render_template("menu.html", table_id=table_id, menu_items=self.menu_items)
 
         @app.route("/submit/<table_id>", methods=["POST"])
         def submit_order(table_id):
@@ -244,14 +124,14 @@ class WebOrderServer:
                 status = STATUS_CANCELED
                 reason = "No items selected."
                 self._store_order(table_id, order_id, items, special, status)
-                return render_template_string(RESULT_HTML, ok=False, reason=reason,
+                return render_template("result.html", ok=False, reason=reason,
                                               table_id=table_id, order_id=order_id, status=status)
 
             ok, reason = self._reserve_inventory(items)
             if not ok:
                 status = STATUS_CANCELED
                 self._store_order(table_id, order_id, items, special, status)
-                return render_template_string(RESULT_HTML, ok=False, reason=reason,
+                return render_template("result.html", ok=False, reason=reason,
                                               table_id=table_id, order_id=order_id, status=status)
 
             status = STATUS_CREATED
@@ -259,7 +139,7 @@ class WebOrderServer:
             self.store.set_active(table_id, order_id)
 
             self._publish_order_new_once(order_id)
-            return render_template_string(RESULT_HTML, ok=True, reason="OK",
+            return render_template("result.html", ok=True, reason="OK",
                                           table_id=table_id, order_id=order_id, status=status)
 
         @app.route("/status/<order_id>", methods=["GET"])
@@ -269,8 +149,8 @@ class WebOrderServer:
                 return "Order not found", 404
 
             items_pre = "\n".join([f"- {x['name']} x {x['amount']}" for x in od["items"]]) or "(none)"
-            return render_template_string(
-                STATUS_HTML,
+            return render_template(
+                "status.html",
                 table_id=od["table_id"],
                 order_id=order_id,
                 status=od["status"],

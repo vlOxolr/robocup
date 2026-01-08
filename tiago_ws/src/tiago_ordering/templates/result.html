@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Order Result</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; max-width: 720px; }
+    .ok { color: #0a7; }
+    .bad { color: #c33; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
+    .muted { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Order Result</h2>
+
+  {% if ok %}
+    <p class="ok"><b>Success.</b> Order received.</p>
+  {% else %}
+    <p class="bad"><b>Failed.</b> {{ reason }}</p>
+  {% endif %}
+
+  <div class="card">
+    <div><b>Table:</b> {{ table_id }}</div>
+    <div><b>Order ID:</b> {{ order_id }}</div>
+    <div><b>Status:</b> {{ status }}</div>
+    <div class="muted">Re-scan QR to view status page.</div>
+  </div>
+
+  <a href="{{ url_for('table_entry', table_id=table_id) }}">Back</a>
+</body>
+</html>
