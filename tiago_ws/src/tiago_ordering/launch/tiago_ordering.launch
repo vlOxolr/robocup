@@ -1,0 +1,20 @@
+<launch>
+  <node pkg="tiago_ordering" type="inventory_manager.py" name="inventory_manager" output="screen">
+    <rosparam param="initial_inventory">
+      cola: 5
+      water: 10
+      burger: 3
+    </rosparam>
+    <param name="publish_rate_hz" value="1.0" />
+  </node>
+
+  <node pkg="tiago_ordering" type="web_order_server.py" name="web_order_server" output="screen">
+    <rosparam param="menu_items">
+      - cola
+      - water
+      - burger
+    </rosparam>
+    <param name="host" value="0.0.0.0" />
+    <param name="port" value="8080" />
+  </node>
+</launch>
