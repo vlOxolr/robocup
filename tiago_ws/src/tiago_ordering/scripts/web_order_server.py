@@ -200,7 +200,11 @@ class WebOrderServer:
         self.host = rospy.get_param("~host", "0.0.0.0")
         self.port = int(rospy.get_param("~port", 8080))
 
-        self.order_pub = rospy.Publisher("/orders", Order, queue_size=10)
+        self.order_new_pub = rospy.Publisher("/orders/new", Order, queue_size=10)
+        self.order_status_pub = rospy.Publisher("/orders/status", Order, queue_size=10)
+
+        self.status_hz = float(rospy.get_param("~status_publish_hz", 1.0))
+        self.status_timer = rospy.Timer(rospy.Duration(1.0 / max(self.status_hz, 0.1)), self._publish_status_tick)
 
         rospy.wait_for_service("/inventory/reserve")
         self.reserve_srv = rospy.ServiceProxy("/inventory/reserve", Reserve)
@@ -254,7 +258,7 @@ class WebOrderServer:
             self._store_order(table_id, order_id, items, special, status)
             self.store.set_active(table_id, order_id)
 
-            self._publish_order_once(order_id)
+            self._publish_order_new_once(order_id)
             return render_template_string(RESULT_HTML, ok=True, reason="OK",
                                           table_id=table_id, order_id=order_id, status=status)
 
@@ -316,7 +320,7 @@ class WebOrderServer:
         except Exception as e:
             return False, f"inventory service error: {e}"
 
-    def _publish_order_once(self, order_id):
+    def _publish_order_new_once(self, order_id):
         if not self.store.mark_published_once(order_id):
             rospy.logwarn("[web_order_server] duplicated publish blocked for order_id=%s", order_id)
             return
@@ -338,9 +342,41 @@ class WebOrderServer:
             oi.amount = int(x["amount"])
             msg.items.append(oi)
 
-        self.order_pub.publish(msg)
-        rospy.loginfo("[web_order_server] published /orders: table=%s order_id=%s status=%s",
-                      msg.table_id, msg.order_id, msg.status)
+        self.order_new_pub.publish(msg)
+        rospy.loginfo("[web_order_server] published /orders/new: table=%s order_id=%s status=%s",
+              msg.table_id, msg.order_id, msg.status)
+
+    def _publish_status_tick(self, _evt):
+        """
+        每秒发布当前活跃订单的状态到 /orders/status
+        """
+        # 收集当前活跃订单（防止遍历时锁太久：先拷贝 key 再逐个取）
+        with self.store.lock:
+            active_order_ids = list(self.store.table_active.values())
+
+        for oid in active_order_ids:
+            od = self.store.get_order(oid)
+            if not od:
+                continue
+
+            # 只对活跃态做状态心跳
+            if od["status"] not in ACTIVE_STATUSES:
+                continue
+
+            msg = Order()
+            msg.order_id = od["order_id"]
+            msg.table_id = od["table_id"]
+            msg.timestamp = rospy.Time.now()
+            msg.special_request = od["special_request"]
+            msg.status = od["status"]
+
+            for x in od["items"]:
+                oi = OrderItem()
+                oi.name = x["name"]
+                oi.amount = int(x["amount"])
+                msg.items.append(oi)
+
+            self.order_status_pub.publish(msg)
 
     def run(self):
         self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
