@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Table {{ table_id }} - Menu</title>
+  <title>Menu - Table {{ table_id }}</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 18px; max-width: 720px; }
     .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-  <h2>Table {{ table_id }} - Menu</h2>
+  <h2>Menu - Table {{ table_id }}</h2>
   <p class="muted">Submit once. Re-scan QR will show status if an active order exists.</p>
 
   <form method="POST" action="{{ url_for('submit_order', table_id=table_id) }}">
@@ -24,7 +24,7 @@
         <div class="row">
           <div style="flex:1;"><b>{{ name }}</b></div>
           <div>
-            Qty:
+            Quantity:
             <input type="number" min="0" max="99" name="qty_{{ name }}" value="0"/>
           </div>
         </div>
