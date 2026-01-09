@@ -12,20 +12,25 @@
     h2 { margin: 6px 0 12px; font-size: 22px; }
     .card { background:#fff; border:1px solid var(--bd); border-radius:14px; padding:14px; margin:12px 0; }
     .muted { color:var(--muted); font-size: 13px; }
+    .kv { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    .kv > div { min-width: 220px; }
+
+    /* Status badge */
     .badge {
       display:inline-block;
       padding: 10px 14px;
       border-radius: 999px;
       font-size: 18px;
-      font-weight: 800;
+      font-weight: 900;
       letter-spacing: 0.6px;
       border: 1px solid var(--bd);
-      background: #111;
-      color: #fff;
     }
+    .st-created { background: #FFD54A; color: #111; border-color: #F2C230; }
+    .st-green   { background: #16A34A; color: #fff; border-color: #12803B; }
+    .st-served  { background: #111;    color: #fff; border-color: #111; }
+    .st-cancel  { background: #DC2626; color: #fff; border-color: #B91C1C; }
+
     pre { background:#f6f6f6; padding: 12px; border-radius: 12px; overflow:auto; font-size: 15px; }
-    .kv { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-    .kv > div { min-width: 220px; }
   </style>
 </head>
 <body>
@@ -40,7 +45,8 @@
 
       <div style="margin-top:12px;">
         <div class="muted" style="margin-bottom:6px;">STATUS</div>
-        <span class="badge" id="st">{{ status }}</span>
+        {% set st0 = (status or '')|upper %}
+        <span class="badge" id="st">{{ st0 }}</span>
       </div>
 
       <div class="muted" style="margin-top:10px;">Auto refresh every 2 seconds.</div>
@@ -55,13 +61,42 @@
   </div>
 
 <script>
+function applyStatusStyle(st) {
+  const el = document.getElementById("st");
+  if (!el) return;
+
+  // reset
+  el.classList.remove("st-created", "st-green", "st-served", "st-cancel");
+
+  const s = (st || "").toUpperCase();
+  if (s === "CREATED") {
+    el.classList.add("st-created");
+  } else if (s === "CONFIRMED" || s === "SERVING") {
+    el.classList.add("st-green");
+  } else if (s === "SERVED") {
+    el.classList.add("st-served");
+  } else if (s === "CANCELED") {
+    el.classList.add("st-cancel");
+  } else {
+    el.classList.add("st-cancel");
+  }
+}
+
 async function refresh() {
   const r = await fetch("{{ url_for('api_status', table_id=table_id) }}");
   if (!r.ok) return;
   const j = await r.json();
   if (!j.ok) return;
-  document.getElementById("st").innerText = j.status;
+
+  const st = j.status;
+  const el = document.getElementById("st");
+  el.innerText = (st || "").toUpperCase();
+  applyStatusStyle(st);
 }
+
+// initial style on page load
+applyStatusStyle(document.getElementById("st").innerText);
+
 setInterval(refresh, 2000);
 </script>
 </body>
