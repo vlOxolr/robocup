@@ -14,12 +14,14 @@ from tiago_ordering.srv import Reserve, ReserveRequest
 from tiago_ordering.msg import ReserveItem
 
 STATUS_CREATED   = "CREATED"
-STATUS_CONFIRMED = "CONFIRMED"
+STATUS_CONFIRMED = "CREATED"
 STATUS_CANCELED  = "CANCELED"
 STATUS_SERVING   = "SERVING"
 STATUS_SERVED    = "SERVED"
+STATUS_DENIED    = "DENIED"
 
 ACTIVE_STATUSES = {STATUS_CREATED, STATUS_CONFIRMED, STATUS_SERVING}
+BLOCKING_STATUSES = {STATUS_CONFIRMED, STATUS_SERVING}
 
 class OrderStore:
     def __init__(self):
@@ -27,6 +29,8 @@ class OrderStore:
         self.table_active = {}   # table_id -> order_id
         self.orders = {}         # order_id -> data
         self.published = set()   # published order_ids
+        self.table_latest_status = {}  # table_id -> status (from /orders/status)
+
 
     def get_active_order_id(self, table_id):
         with self.lock:
@@ -61,6 +65,15 @@ class OrderStore:
             if order_id in self.orders:
                 self.orders[order_id]["status"] = status
 
+    def set_table_status(self, table_id, status):
+        with self.lock:
+            self.table_latest_status[str(table_id)] = str(status).upper()
+
+    def get_table_status(self, table_id):
+        with self.lock:
+            return self.table_latest_status.get(str(table_id))
+
+
 
 def make_order_id_4():
     return uuid.uuid4().hex[:4].upper()
@@ -82,6 +95,8 @@ class WebOrderServer:
 
         self.order_new_pub = rospy.Publisher("/orders/new", Order, queue_size=10)
         self.order_status_pub = rospy.Publisher("/orders/status", Order, queue_size=10)
+
+        self.order_status_sub = rospy.Subscriber("/orders/status", Order, self._on_status_msg, queue_size=50)
 
         self.status_hz = float(rospy.get_param("~status_publish_hz", 1.0))
         self.status_timer = rospy.Timer(rospy.Duration(1.0 / max(self.status_hz, 0.1)), self._publish_status_tick)
@@ -125,22 +140,49 @@ class WebOrderServer:
                 reason = "No items selected."
                 self._store_order(table_id, order_id, items, special, status)
                 return render_template("result.html", ok=False, reason=reason,
-                                              table_id=table_id, order_id=order_id, status=status)
+                                            table_id=table_id, order_id=order_id, status=status)
 
+            # ========= (A) 先检查：topic里该桌是否已有 CONFIRMED/SERVING =========
+            blocked = False
+
+            # 1) 看 topic 缓存
+            topic_st = self.store.get_table_status(table_id)
+            if topic_st in BLOCKING_STATUSES:
+                blocked = True
+
+            # 2) 再额外兜底：看本地 active 的订单状态（防止 topic 有延迟）
+            if not blocked:
+                active_id = self.store.get_active_order_id(table_id)
+                if active_id:
+                    od_active = self.store.get_order(active_id)
+                    if od_active and (od_active.get("status") in BLOCKING_STATUSES):
+                        blocked = True
+
+            if blocked:
+                status = STATUS_DENIED
+                reason = "This table already has an active order (CONFIRMED/SERVING)."
+                self._store_order(table_id, order_id, items, special, status)
+                # 注意：DENIED 不 set_active，不 reserve，不 publish
+                return render_template("result.html", ok=False, reason=reason,
+                                            table_id=table_id, order_id=order_id, status=status)
+
+            # ========= (B) 没挡住才 reserve，避免库存被重复扣 =========
             ok, reason = self._reserve_inventory(items)
             if not ok:
                 status = STATUS_CANCELED
                 self._store_order(table_id, order_id, items, special, status)
                 return render_template("result.html", ok=False, reason=reason,
-                                              table_id=table_id, order_id=order_id, status=status)
+                                            table_id=table_id, order_id=order_id, status=status)
 
-            status = STATUS_CREATED
+            # ========= (C) 通过后直接 CONFIRMED =========
+            status = STATUS_CONFIRMED
             self._store_order(table_id, order_id, items, special, status)
             self.store.set_active(table_id, order_id)
 
             self._publish_order_new_once(order_id)
             return render_template("result.html", ok=True, reason="OK",
-                                          table_id=table_id, order_id=order_id, status=status)
+                                        table_id=table_id, order_id=order_id, status=status)
+
 
         @app.route("/status/<order_id>", methods=["GET"])
         def status_page(order_id):
@@ -181,8 +223,9 @@ class WebOrderServer:
         }
         self.store.put_order(order_id, data)
 
-        if status in {STATUS_CANCELED, STATUS_SERVED}:
+        if status in {STATUS_CANCELED, STATUS_SERVED, STATUS_DENIED}:
             self.store.clear_active_if_matches(table_id, order_id)
+
 
     def _reserve_inventory(self, items):
         req = ReserveRequest()
@@ -257,6 +300,26 @@ class WebOrderServer:
                 msg.items.append(oi)
 
             self.order_status_pub.publish(msg)
+
+    def _on_status_msg(self, msg: Order):
+        """
+        监听 /orders/status，把 topic 上的状态缓存下来，并同步更新本地订单状态（若存在）。
+        """
+        table_id = str(msg.table_id)
+        order_id = str(msg.order_id)
+        st = (msg.status or "").upper()
+
+        # 1) 记录“该桌最新状态”（用于 submit 时判断是否挡单）
+        self.store.set_table_status(table_id, st)
+
+        # 2) 若本地 store 中存在该 order_id，也同步更新（便于 status 页面显示）
+        od = self.store.get_order(order_id)
+        if od:
+            self.store.update_status(order_id, st)
+
+            # served/canceled 后释放 active
+            if st in {STATUS_SERVED, STATUS_CANCELED, STATUS_DENIED}:
+                self.store.clear_active_if_matches(table_id, order_id)
 
     def run(self):
         self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)

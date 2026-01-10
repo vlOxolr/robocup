@@ -35,6 +35,8 @@
     .st-green   { background: #16A34A; color: #fff; }  /* green */
     .st-served  { background: #111;    color: #fff; }  /* black */
     .st-cancel  { background: #DC2626; color: #fff; }  /* red */
+    .st-denied  { background: #6B7280; color: #fff; } /* gray */
+
   </style>
 </head>
 <body>
@@ -62,6 +64,8 @@
           <span class="badge st-served">{{ st }}</span>
         {% elif st == 'CANCELED' %}
           <span class="badge st-cancel">{{ st }}</span>
+        {% elif st == 'DENIED' %}
+          <span class="badge st-denied">{{ st }}</span>
         {% else %}
           <span class="badge st-cancel">{{ st }}</span>
         {% endif %}

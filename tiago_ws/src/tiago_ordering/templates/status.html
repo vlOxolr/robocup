@@ -29,6 +29,8 @@
     .st-green   { background: #16A34A; color: #fff; border-color: #12803B; }
     .st-served  { background: #111;    color: #fff; border-color: #111; }
     .st-cancel  { background: #DC2626; color: #fff; border-color: #B91C1C; }
+    .st-denied { background: #6B7280; color: #fff; border-color: #4B5563; }
+
 
     pre { background:#f6f6f6; padding: 12px; border-radius: 12px; overflow:auto; font-size: 15px; }
   </style>
@@ -77,6 +79,8 @@ function applyStatusStyle(st) {
     el.classList.add("st-served");
   } else if (s === "CANCELED") {
     el.classList.add("st-cancel");
+  } else if (s === "DENIED") {
+    el.classList.add("st-denied");
   } else {
     el.classList.add("st-cancel");
   }
