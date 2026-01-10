@@ -14,8 +14,7 @@ from tiago_ordering.srv import Reserve, ReserveRequest
 from tiago_ordering.msg import ReserveItem
 
 STATUS_CREATED   = "CREATED"
-STATUS_CONFIRMED = "CREATED"
-STATUS_CANCELED  = "CANCELED"
+STATUS_CONFIRMED = "CONFIRMED"
 STATUS_SERVING   = "SERVING"
 STATUS_SERVED    = "SERVED"
 STATUS_DENIED    = "DENIED"
@@ -135,22 +134,29 @@ class WebOrderServer:
 
             special = (request.form.get("special_request", "") or "").strip()
 
-            if len(items) == 0:
-                status = STATUS_CANCELED
-                reason = "No items selected."
-                self._store_order(table_id, order_id, items, special, status)
-                return render_template("result.html", ok=False, reason=reason,
-                                            table_id=table_id, order_id=order_id, status=status)
+            # 0) 提交瞬间：先 CREATED 入库
+            status = STATUS_CREATED
+            self._store_order(table_id, order_id, items, special, status)
 
-            # ========= (A) 先检查：topic里该桌是否已有 CONFIRMED/SERVING =========
+            # 1) 若没选菜：按你要求也 DENIED（原来是 CANCELED）
+            if len(items) == 0:
+                self.store.update_status(order_id, STATUS_DENIED)
+                return render_template(
+                    "result.html",
+                    ok=False,
+                    reason="No items selected.",
+                    table_id=table_id,
+                    order_id=order_id,
+                    status=STATUS_DENIED
+                )
+
+            # 2) 检查“同桌是否已有 CONFIRMED/SERVING”（topic + 本地兜底）
             blocked = False
 
-            # 1) 看 topic 缓存
             topic_st = self.store.get_table_status(table_id)
             if topic_st in BLOCKING_STATUSES:
                 blocked = True
 
-            # 2) 再额外兜底：看本地 active 的订单状态（防止 topic 有延迟）
             if not blocked:
                 active_id = self.store.get_active_order_id(table_id)
                 if active_id:
@@ -159,29 +165,43 @@ class WebOrderServer:
                         blocked = True
 
             if blocked:
-                status = STATUS_DENIED
-                reason = "This table already has an active order (CONFIRMED/SERVING)."
-                self._store_order(table_id, order_id, items, special, status)
-                # 注意：DENIED 不 set_active，不 reserve，不 publish
-                return render_template("result.html", ok=False, reason=reason,
-                                            table_id=table_id, order_id=order_id, status=status)
+                self.store.update_status(order_id, STATUS_DENIED)
+                return render_template(
+                    "result.html",
+                    ok=False,
+                    reason="This table already has an active order (CONFIRMED/SERVING).",
+                    table_id=table_id,
+                    order_id=order_id,
+                    status=STATUS_DENIED
+                )
 
-            # ========= (B) 没挡住才 reserve，避免库存被重复扣 =========
+            # 3) 库存检查：不足则 DENIED（原来是 CANCELED）
             ok, reason = self._reserve_inventory(items)
             if not ok:
-                status = STATUS_CANCELED
-                self._store_order(table_id, order_id, items, special, status)
-                return render_template("result.html", ok=False, reason=reason,
-                                            table_id=table_id, order_id=order_id, status=status)
+                self.store.update_status(order_id, STATUS_DENIED)
+                return render_template(
+                    "result.html",
+                    ok=False,
+                    reason=reason,
+                    table_id=table_id,
+                    order_id=order_id,
+                    status=STATUS_DENIED
+                )
 
-            # ========= (C) 通过后直接 CONFIRMED =========
-            status = STATUS_CONFIRMED
-            self._store_order(table_id, order_id, items, special, status)
+            # 4) 通过：CREATED -> CONFIRMED，并 set_active + publish
+            self.store.update_status(order_id, STATUS_CONFIRMED)
             self.store.set_active(table_id, order_id)
 
             self._publish_order_new_once(order_id)
-            return render_template("result.html", ok=True, reason="OK",
-                                        table_id=table_id, order_id=order_id, status=status)
+
+            return render_template(
+                "result.html",
+                ok=True,
+                reason="OK",
+                table_id=table_id,
+                order_id=order_id,
+                status=STATUS_CONFIRMED
+            )
 
 
         @app.route("/status/<order_id>", methods=["GET"])
@@ -223,7 +243,7 @@ class WebOrderServer:
         }
         self.store.put_order(order_id, data)
 
-        if status in {STATUS_CANCELED, STATUS_SERVED, STATUS_DENIED}:
+        if status in {STATUS_SERVED, STATUS_DENIED}:
             self.store.clear_active_if_matches(table_id, order_id)
 
 
@@ -318,7 +338,7 @@ class WebOrderServer:
             self.store.update_status(order_id, st)
 
             # served/canceled 后释放 active
-            if st in {STATUS_SERVED, STATUS_CANCELED, STATUS_DENIED}:
+            if st in {STATUS_SERVED, STATUS_DENIED}:
                 self.store.clear_active_if_matches(table_id, order_id)
 
     def run(self):

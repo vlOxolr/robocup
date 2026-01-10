@@ -34,8 +34,7 @@
     .st-created { background: #FFD54A; color: #111; }  /* yellow */
     .st-green   { background: #16A34A; color: #fff; }  /* green */
     .st-served  { background: #111;    color: #fff; }  /* black */
-    .st-cancel  { background: #DC2626; color: #fff; }  /* red */
-    .st-denied  { background: #6B7280; color: #fff; } /* gray */
+    .st-denied  { background: #DC2626; color: #fff; }  /* red */
 
   </style>
 </head>
@@ -62,13 +61,12 @@
           <span class="badge st-green">{{ st }}</span>
         {% elif st == 'SERVED' %}
           <span class="badge st-served">{{ st }}</span>
-        {% elif st == 'CANCELED' %}
-          <span class="badge st-cancel">{{ st }}</span>
         {% elif st == 'DENIED' %}
           <span class="badge st-denied">{{ st }}</span>
         {% else %}
-          <span class="badge st-cancel">{{ st }}</span>
+          <span class="badge st-denied">{{ st }}</span>
         {% endif %}
+
       </div>
 
       <div class="muted" style="margin-top:10px;">Re-scan QR to view status page.</div>
