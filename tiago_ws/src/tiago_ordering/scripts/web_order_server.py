@@ -59,10 +59,37 @@ class OrderStore:
             self.published.add(order_id)
             return True
 
-    def update_status(self, order_id, status):
+    def update_status(self, order_id, status, reason=None):
+        status = (status or "").upper()
+        reason_str = (reason or "").strip()
+
         with self.lock:
-            if order_id in self.orders:
-                self.orders[order_id]["status"] = status
+            od = self.orders.get(order_id)
+            if not od:
+                return False
+
+            old = (od.get("status") or "").upper()
+            if old == status and (not reason_str):
+                return False  # 状态没变且没新 reason，就不刷日志
+
+            # 更新状态
+            if old != status:
+                od["status"] = status
+
+            # 尽可能保存 reason（可用于后续页面/调试）
+            if reason_str:
+                od["reason"] = reason_str
+
+            table_id = od.get("table_id", "?")
+
+        # 锁外打印，避免阻塞
+        if reason_str:
+            rospy.loginfo("[web_order_server] order status changed: table=%s order_id=%s %s -> %s reason=%s",
+                        table_id, order_id, old, status, reason_str)
+        else:
+            rospy.loginfo("[web_order_server] order status changed: table=%s order_id=%s %s -> %s",
+                        table_id, order_id, old, status)
+        return True
 
     def set_table_status(self, table_id, status):
         with self.lock:
@@ -140,7 +167,7 @@ class WebOrderServer:
 
             # 1) 若没选菜：按你要求也 DENIED（原来是 CANCELED）
             if len(items) == 0:
-                self.store.update_status(order_id, STATUS_DENIED)
+                self.store.update_status(order_id, STATUS_DENIED, "No items selected.")
                 return render_template(
                     "result.html",
                     ok=False,
@@ -165,11 +192,12 @@ class WebOrderServer:
                         blocked = True
 
             if blocked:
-                self.store.update_status(order_id, STATUS_DENIED)
+                self.store.update_status(order_id, STATUS_DENIED,
+                    "This table already has an active order.")
                 return render_template(
                     "result.html",
                     ok=False,
-                    reason="This table already has an active order (CONFIRMED/SERVING).",
+                    reason="This table already has an active order.",
                     table_id=table_id,
                     order_id=order_id,
                     status=STATUS_DENIED
@@ -178,7 +206,7 @@ class WebOrderServer:
             # 3) 库存检查：不足则 DENIED（原来是 CANCELED）
             ok, reason = self._reserve_inventory(items)
             if not ok:
-                self.store.update_status(order_id, STATUS_DENIED)
+                self.store.update_status(order_id, STATUS_DENIED, reason)
                 return render_template(
                     "result.html",
                     ok=False,
@@ -189,7 +217,7 @@ class WebOrderServer:
                 )
 
             # 4) 通过：CREATED -> CONFIRMED，并 set_active + publish
-            self.store.update_status(order_id, STATUS_CONFIRMED)
+            self.store.update_status(order_id, STATUS_CONFIRMED, "OK")
             self.store.set_active(table_id, order_id)
 
             self._publish_order_new_once(order_id)
@@ -239,9 +267,13 @@ class WebOrderServer:
             "timestamp": now_iso(),
             "items": items,
             "special_request": special,
-            "status": status
+            "status": status,
+            "reason": ""
         }
         self.store.put_order(order_id, data)
+
+        rospy.loginfo("[web_order_server] order created: table=%s order_id=%s status=%s reason=%s",
+              table_id, order_id, status, "submitted")
 
         if status in {STATUS_SERVED, STATUS_DENIED}:
             self.store.clear_active_if_matches(table_id, order_id)
