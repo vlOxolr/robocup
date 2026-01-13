@@ -12,6 +12,7 @@ from flask import Flask, request, redirect, url_for, render_template
 from tiago_ordering.msg import Order, OrderItem
 from tiago_ordering.srv import Reserve, ReserveRequest
 from tiago_ordering.msg import ReserveItem
+from tiago_ordering.msg import OrderStatusUpdate
 
 STATUS_CREATED   = "CREATED"
 STATUS_CONFIRMED = "CONFIRMED"
@@ -123,6 +124,7 @@ class WebOrderServer:
         self.order_status_pub = rospy.Publisher("/orders/status", Order, queue_size=10)
 
         self.order_status_sub = rospy.Subscriber("/orders/status", Order, self._on_status_msg, queue_size=50)
+        self.order_update_sub = rospy.Subscriber("/orders/update", OrderStatusUpdate, self._on_update_msg, queue_size=200)
 
         self.status_hz = float(rospy.get_param("~status_publish_hz", 1.0))
         self.status_timer = rospy.Timer(rospy.Duration(1.0 / max(self.status_hz, 0.1)), self._publish_status_tick)
@@ -372,6 +374,25 @@ class WebOrderServer:
             # served/canceled 后释放 active
             if st in {STATUS_SERVED, STATUS_DENIED}:
                 self.store.clear_active_if_matches(table_id, order_id)
+                
+    def _on_update_msg(self, msg: OrderStatusUpdate):
+        oid = str(msg.order_id).strip()
+        st = (msg.status or "").upper()
+        rs = (msg.reason or "").strip()
+
+        if not oid:
+            return
+
+        # 更新本地 order 状态 + reason，并打印日志（你已经做在 update_status 里）
+        changed = self.store.update_status(oid, st, rs)
+
+        # 同时更新“该桌最新状态缓存”（如果本地知道 table_id）
+        od = self.store.get_order(oid)
+        if od:
+            self.store.set_table_status(od["table_id"], st)
+            if st in {"SERVED", "DENIED"}:
+                self.store.clear_active_if_matches(od["table_id"], oid)
+
 
     def run(self):
         self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)

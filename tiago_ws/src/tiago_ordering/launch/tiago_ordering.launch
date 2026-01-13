@@ -18,4 +18,7 @@
     <param name="port" value="8080" />
     <param name="status_publish_hz" value="1.0" />
   </node>
+
+  <!-- order_manager: provides /orders/set_status and publishes updates to /orders/status -->
+  <node pkg="tiago_ordering" type="order_manager.py" name="order_manager" output="screen" />
 </launch>

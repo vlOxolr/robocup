@@ -56,12 +56,14 @@ add_message_files(
   InventoryItem.msg
   Inventory.msg
   ReserveItem.msg
+  OrderStatusUpdate.msg
 )
 
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
   Reserve.srv
+  SetOrderStatus.srv
 )
 
 ## Generate actions in the 'action' folder
