@@ -1,0 +1,41 @@
+<launch>
+  <!-- Core params -->
+  <arg name="marker_topic" default="/item_markers"/>
+  <arg name="freeze_wait_sec" default="2.5"/>
+  <arg name="planning_frame" default="base_footprint"/>
+
+  <!-- MoveIt params -->
+  <arg name="arm_group" default="arm_torso"/>
+  <arg name="ee_link" default="gripper_grasping_frame"/> <!-- change to your actual link -->
+  <arg name="gripper_group" default="gripper"/>
+
+  <!-- Pregrasp / approach params -->
+  <arg name="pregrasp_dx" default="0.0"/>
+  <arg name="pregrasp_dy" default="0.0"/>
+  <arg name="pregrasp_dz" default="0.15"/> <!-- above object -->
+  <arg name="approach_dist" default="0.10"/>
+  <arg name="retreat_dist" default="0.10"/>
+
+  <!-- Gripper joint targets (simple joint-value control placeholder) -->
+  <arg name="gripper_open" default="0.04"/>
+  <arg name="gripper_closed" default="0.00"/>
+
+  <node pkg="tiago_pick_place" type="pick_place_node.py" name="tiago_pick_place" output="screen">
+    <param name="marker_topic" value="$(arg marker_topic)"/>
+    <param name="freeze_wait_sec" value="$(arg freeze_wait_sec)"/>
+    <param name="planning_frame" value="$(arg planning_frame)"/>
+
+    <param name="arm_group" value="$(arg arm_group)"/>
+    <param name="ee_link" value="$(arg ee_link)"/>
+    <param name="gripper_group" value="$(arg gripper_group)"/>
+
+    <param name="pregrasp_dx" value="$(arg pregrasp_dx)"/>
+    <param name="pregrasp_dy" value="$(arg pregrasp_dy)"/>
+    <param name="pregrasp_dz" value="$(arg pregrasp_dz)"/>
+    <param name="approach_dist" value="$(arg approach_dist)"/>
+    <param name="retreat_dist" value="$(arg retreat_dist)"/>
+
+    <param name="gripper_open" value="$(arg gripper_open)"/>
+    <param name="gripper_closed" value="$(arg gripper_closed)"/>
+  </node>
+</launch>
