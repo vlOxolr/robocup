@@ -3,33 +3,27 @@
 
 import rospy
 import copy
-import actionlib
+import threading
 from std_srvs.srv import Trigger, TriggerResponse
 from geometry_msgs.msg import PoseStamped
+from moveit_commander import MoveGroupCommander, PlanningSceneInterface, roscpp_initialize
 
-from moveit_commander import MoveGroupCommander, roscpp_initialize
-from moveit_msgs.msg import MoveGroupAction, PlanningScene, AttachedCollisionObject
-from shape_msgs.msg import SolidPrimitive
-
-from tiago_pick_place.scene_freezer import SceneFreezer, sanitize_id
+from tiago_pick_place.scene_freezer import SceneFreezer
 
 
 class TiagoPickPlace:
     def __init__(self):
         roscpp_initialize([])
 
-        # ---------------- Params ----------------
+        # Params
         self.marker_topic = rospy.get_param("~marker_topic", "/item_markers")
-        self.freeze_wait_sec = float(rospy.get_param("~freeze_wait_sec", 2.5))
+        self.freeze_wait_sec = float(rospy.get_param("~freeze_wait_sec", 3.0))
         self.planning_frame = rospy.get_param("~planning_frame", "base_link")
-        self.target_ns = rospy.get_param("~target_ns", "apple")
+        self.target_ns = rospy.get_param("~target_ns", "apple")  # canonical label or alias
 
         self.arm_group_name = rospy.get_param("~arm_group", "arm_torso")
-        self.gripper_group_name = rospy.get_param("~gripper_group", "gripper")
+        self.gripper_group_name = rospy.get_param("~gripper_group", "pal-gripper")
         self.ee_link = rospy.get_param("~ee_link", "")
-
-        # Wait time for MoveIt move_group action server
-        self.move_group_wait_sec = float(rospy.get_param("~move_group_wait_sec", 30.0))
 
         self.pregrasp_dx = float(rospy.get_param("~pregrasp_dx", 0.0))
         self.pregrasp_dy = float(rospy.get_param("~pregrasp_dy", 0.0))
@@ -40,10 +34,8 @@ class TiagoPickPlace:
         self.gripper_open = float(rospy.get_param("~gripper_open", 0.04))
         self.gripper_closed = float(rospy.get_param("~gripper_closed", 0.00))
 
-        # ---------------- Ensure move_group is ready ----------------
-        self._wait_for_move_group("/move_group", self.move_group_wait_sec)
-
-        # ---------------- MoveIt groups (after server is ready) ----------------
+        # MoveIt (async scene to avoid blocking on /get_planning_scene)
+        self.scene = PlanningSceneInterface(synchronous=False)
         self.arm = MoveGroupCommander(self.arm_group_name)
         self.gripper = MoveGroupCommander(self.gripper_group_name)
 
@@ -54,40 +46,27 @@ class TiagoPickPlace:
         self.arm.set_num_planning_attempts(10)
         self.arm.allow_replanning(True)
 
-        # ---------------- Scene freezer & /planning_scene publisher ----------------
+        # Freezer (label_aliases + KDE mode)
         self.freezer = SceneFreezer(
             marker_topic=self.marker_topic,
             freeze_wait_sec=self.freeze_wait_sec,
             planning_frame=self.planning_frame
         )
-        self._scene_pub = rospy.Publisher("/planning_scene", PlanningScene, queue_size=10, latch=False)
 
-        # ---------------- Service ----------------
+        # Persisted state for cleanup across calls
+        self._last_attached_obj_id = ""
+        self._srv_lock = threading.Lock()
+
+        # Service
         self.srv = rospy.Service("~trigger_pick", Trigger, self.handle_trigger_pick)
 
         rospy.loginfo("tiago_pick_place ready.")
-        rospy.loginfo(" - move_group action: /move_group (wait %.1fs)", self.move_group_wait_sec)
         rospy.loginfo(" - marker_topic: %s", self.marker_topic)
         rospy.loginfo(" - planning_frame: %s", self.planning_frame)
-        rospy.loginfo(" - target_ns: %s", self.target_ns)
+        rospy.loginfo(" - target_ns (requested): %s", self.target_ns)
         rospy.loginfo(" - arm_group: %s", self.arm_group_name)
         rospy.loginfo(" - gripper_group: %s", self.gripper_group_name)
         rospy.loginfo(" - ee_link: %s", self.arm.get_end_effector_link())
-
-    def _wait_for_move_group(self, action_name: str, timeout_sec: float):
-        rospy.loginfo("Waiting for MoveGroupAction server at '%s' (timeout=%.1fs)...", action_name, timeout_sec)
-        client = actionlib.SimpleActionClient(action_name, MoveGroupAction)
-        ok = client.wait_for_server(rospy.Duration.from_sec(timeout_sec))
-        if not ok:
-            # Give diagnostics
-            try:
-                topics = rospy.get_published_topics()
-                mg_topics = [t for (t, _ty) in topics if "move_group" in t]
-                rospy.logerr("MoveGroupAction server not available at '%s'.", action_name)
-                rospy.logerr("Published topics containing 'move_group' (sample): %s", mg_topics[:30])
-            except Exception:
-                pass
-            raise RuntimeError(f"MoveGroupAction server not available: {action_name}")
 
     # -------- Gripper --------
     def _set_gripper(self, value: float) -> bool:
@@ -122,6 +101,16 @@ class TiagoPickPlace:
         return pre
 
     def _cartesian_shift_world_z(self, dz: float) -> bool:
+        """
+        Cartesian shift along WORLD Z by dz (meters) from current EE pose.
+
+        MoveIt Python bindings have different signatures across versions.
+        We'll try common variants until one works:
+        A) (waypoints, eef_step, jump_threshold, avoid_collisions)
+        B) (waypoints, eef_step, jump_threshold, avoid_collisions, path_constraints)
+        C) (waypoints, eef_step, jump_threshold, path_constraints)  # 4th is constraints
+        D) (waypoints, eef_step, jump_threshold)  # very old
+        """
         try:
             cur = self.arm.get_current_pose().pose
             wps = [copy.deepcopy(cur)]
@@ -129,109 +118,153 @@ class TiagoPickPlace:
             nxt.position.z += dz
             wps.append(nxt)
 
-            traj, fraction = self.arm.compute_cartesian_path(
-                wps, eef_step=0.01, jump_threshold=0.0
-            )
-            if fraction < 0.95:
-                rospy.logwarn("Cartesian path fraction too low: %.2f", fraction)
-                return False
+            eef_step = float(rospy.get_param("~cart_eef_step", 0.01))
+            jump_threshold = float(rospy.get_param("~cart_jump_threshold", 0.0))
+            avoid_collisions = bool(rospy.get_param("~cart_avoid_collisions", True))
 
-            self.arm.execute(traj, wait=True)
-            self.arm.stop()
-            return True
+            # Try variants
+            variants = []
+
+            # Variant A: classic
+            variants.append(("A", (wps, eef_step, jump_threshold, avoid_collisions)))
+
+            # Variant B: classic + constraints(None)
+            variants.append(("B", (wps, eef_step, jump_threshold, avoid_collisions, None)))
+
+            # Variant C: 4th is constraints, so pass None
+            variants.append(("C", (wps, eef_step, jump_threshold, None)))
+
+            # Variant D: old
+            variants.append(("D", (wps, eef_step, jump_threshold)))
+
+            last_err = None
+            for tag, args in variants:
+                try:
+                    traj, fraction = self.arm.compute_cartesian_path(*args)
+                    rospy.loginfo("compute_cartesian_path variant %s succeeded. fraction=%.2f", tag, fraction)
+                    if fraction < 0.95:
+                        rospy.logwarn("Cartesian path fraction too low: %.2f", fraction)
+                        return False
+                    ok = self.arm.execute(traj, wait=True)
+                    self.arm.stop()
+                    return bool(ok)
+                except Exception as e:
+                    last_err = e
+                    # only warn at debug level to reduce spam
+                    rospy.logdebug("Variant %s failed: %s", tag, str(e))
+                    continue
+
+            rospy.logwarn("Cartesian shift failed: %s", str(last_err))
+            return False
+
         except Exception as e:
             rospy.logwarn("Cartesian shift failed: %s", str(e))
             return False
 
+
+    # -------- Cleanup --------
+    def _cleanup_previous(self):
+        """Cleanup attached/world objects from previous runs to avoid accumulating stale state."""
+        ee_link = self.arm.get_end_effector_link()
+
+        # Remove any attached object on the end-effector
+        if ee_link:
+            try:
+                self.scene.remove_attached_object(ee_link)
+            except Exception:
+                pass
+
+        # Remove the previously attached object from world as well (safe even if not present)
+        if self._last_attached_obj_id:
+            try:
+                self.scene.remove_world_object(self._last_attached_obj_id)
+            except Exception:
+                pass
+            self._last_attached_obj_id = ""
+
     # -------- Target selection --------
-    def _select_target_marker(self):
-        msg = self.freezer.get_latest()
-        if msg is None or len(msg.markers) == 0:
-            return (False, None, None, None)
+    def _select_target_from_freeze(self):
+        canon_target = self.freezer.canonicalize(self.target_ns)
 
-        for m in msg.markers:
-            if m.type != m.CUBE:
-                continue
-            if m.ns != self.target_ns:
-                continue
+        if not self.freezer.best_estimates:
+            return (False, None, None)
 
-            obj_id = (sanitize_id(m.ns) + "_" + str(m.id)) if m.ns else str(m.id)
+        if canon_target not in self.freezer.best_estimates:
+            best = sorted(self.freezer.best_estimates.items(), key=lambda kv: kv[1]["count"], reverse=True)
+            hint = ", ".join([f"{k}(count={v['count']})" for k, v in best[:5]])
+            rospy.logwarn("Target canon='%s' not found. Candidates: %s", canon_target, hint)
+            return (False, None, None)
 
-            obj_pose = PoseStamped()
-            obj_pose.header.frame_id = self.planning_frame
-            obj_pose.header.stamp = rospy.Time.now()
-            obj_pose.pose = m.pose
+        est = self.freezer.best_estimates[canon_target]
+        obj_id = est["obj_id"]
 
-            size = (float(m.scale.x), float(m.scale.y), float(m.scale.z))
-            rospy.loginfo("Selected target: ns='%s' id=%d -> object_id='%s'", m.ns, m.id, obj_id)
-            return (True, obj_id, obj_pose, size)
+        obj_pose = PoseStamped()
+        obj_pose.header.frame_id = self.planning_frame
+        obj_pose.header.stamp = rospy.Time.now()
+        obj_pose.pose = est["pose"]
 
-        return (False, None, None, None)
-
-    # -------- Attach via /planning_scene diff --------
-    def _publish_attach(self, ee_link: str, obj_id: str, obj_pose, size_xyz) -> bool:
-        try:
-            aco = AttachedCollisionObject()
-            aco.link_name = ee_link
-
-            aco.object.header.stamp = rospy.Time.now()
-            aco.object.header.frame_id = self.planning_frame
-            aco.object.id = obj_id
-            aco.object.operation = aco.object.ADD
-
-            prim = SolidPrimitive()
-            prim.type = SolidPrimitive.BOX
-            prim.dimensions = [max(size_xyz[0], 1e-6), max(size_xyz[1], 1e-6), max(size_xyz[2], 1e-6)]
-            aco.object.primitives.append(prim)
-            aco.object.primitive_poses.append(obj_pose)
-
-            aco.touch_links = self.arm.get_link_names()
-
-            scene = PlanningScene()
-            scene.is_diff = True
-            scene.robot_state.attached_collision_objects.append(aco)
-            self._scene_pub.publish(scene)
-            return True
-        except Exception as e:
-            rospy.logwarn("Publish attach failed: %s", str(e))
-            return False
+        rospy.loginfo("Selected target canon='%s' obj_id='%s' count=%d",
+                      canon_target, obj_id, est["count"])
+        return (True, obj_id, obj_pose)
 
     # -------- Main service --------
     def handle_trigger_pick(self, _req):
-        self._open_gripper()
+        # Avoid concurrent calls (Trigger service can be spammed from clients)
+        with self._srv_lock:
+            # Refresh runtime params (your test script sets /tiago_pick_place/target_ns each call)
+            self.target_ns = rospy.get_param("~target_ns", self.target_ns)
 
-        if not self.freezer.freeze_once():
-            return TriggerResponse(False, "Freeze failed: no boxes published (no markers?).")
+            # Reset freezer to make it reusable across repeated calls
+            self.freezer.reset(clear_scene=True)
 
-        ok_sel, obj_id, obj_pose, size_xyz = self._select_target_marker()
-        if not ok_sel:
-            return TriggerResponse(False, f"Target ns='{self.target_ns}' not found in markers.")
+            # Cleanup previous attached/world objects
+            self._cleanup_previous()
 
-        pre = self._compute_pregrasp_pose(obj_pose)
-        self.arm.set_pose_target(pre)
-        ok_pre = self.arm.go(wait=True)
-        self.arm.stop()
-        self.arm.clear_pose_targets()
-        if not ok_pre:
-            return TriggerResponse(False, "Failed to reach pregrasp pose.")
+            # Open gripper (do not hard-fail if it returns False; keep going)
+            self._open_gripper()
 
-        if not self._cartesian_shift_world_z(-abs(self.approach_dist)):
-            return TriggerResponse(False, "Approach failed (cartesian world Z).")
+            # Freeze and build stable collision boxes
+            if not self.freezer.freeze_once():
+                return TriggerResponse(False, "Freeze failed: no stable canonical collision boxes built.")
 
-        if not self._close_gripper():
-            return TriggerResponse(False, "Close gripper failed.")
+            ok_sel, obj_id, obj_pose = self._select_target_from_freeze()
+            if not ok_sel:
+                return TriggerResponse(False, f"Target '{self.target_ns}' not found in freeze window (after alias mapping).")
 
-        ee_link = self.arm.get_end_effector_link()
-        if not ee_link:
-            return TriggerResponse(False, "End-effector link empty. Set ~ee_link correctly.")
+            # Plan to pregrasp pose
+            pre = self._compute_pregrasp_pose(obj_pose)
+            self.arm.set_pose_target(pre)
+            ok_pre = self.arm.go(wait=True)
+            self.arm.stop()
+            self.arm.clear_pose_targets()
+            if not ok_pre:
+                return TriggerResponse(False, "Failed to reach pregrasp pose.")
 
-        if not self._publish_attach(ee_link, obj_id, obj_pose.pose, size_xyz):
-            return TriggerResponse(False, "Attach publish failed.")
+            # Approach
+            if not self._cartesian_shift_world_z(-abs(self.approach_dist)):
+                return TriggerResponse(False, "Approach failed (cartesian world Z).")
 
-        if not self._cartesian_shift_world_z(+abs(self.retreat_dist)):
-            return TriggerResponse(False, "Retreat failed (cartesian world Z).")
+            # Close gripper
+            if not self._close_gripper():
+                return TriggerResponse(False, "Close gripper failed.")
 
-        return TriggerResponse(True, f"Pick done. Attached object: {obj_id}")
+            # Attach object to end-effector for planning
+            ee_link = self.arm.get_end_effector_link()
+            if not ee_link:
+                return TriggerResponse(False, "End-effector link empty. Set ~ee_link correctly.")
+
+            try:
+                touch_links = self.arm.get_link_names()
+                self.scene.attach_box(ee_link, obj_id, touch_links=touch_links)
+                self._last_attached_obj_id = obj_id
+            except Exception as e:
+                return TriggerResponse(False, "Attach failed: " + str(e))
+
+            # Retreat
+            if not self._cartesian_shift_world_z(+abs(self.retreat_dist)):
+                return TriggerResponse(False, "Retreat failed (cartesian world Z).")
+
+            return TriggerResponse(True, f"Pick done. Attached object: {obj_id}")
 
 
 def main():

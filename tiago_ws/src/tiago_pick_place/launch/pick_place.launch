@@ -1,22 +1,22 @@
 <launch>
   <!-- Core params -->
   <arg name="marker_topic" default="/item_markers"/>
-  <arg name="freeze_wait_sec" default="2.5"/>
-  <arg name="planning_frame" default="base_footprint"/>
+  <arg name="freeze_wait_sec" default="5.0"/>
+  <arg name="planning_frame" default="base_link"/>
 
   <!-- MoveIt params -->
   <arg name="arm_group" default="arm_torso"/>
-  <arg name="ee_link" default="gripper_grasping_frame"/> <!-- change to your actual link -->
-  <arg name="gripper_group" default="gripper"/>
+  <arg name="ee_link" default="gripper_grasping_frame"/>
+  <arg name="gripper_group" default="pal-gripper"/>
 
   <!-- Pregrasp / approach params -->
   <arg name="pregrasp_dx" default="0.0"/>
   <arg name="pregrasp_dy" default="0.0"/>
-  <arg name="pregrasp_dz" default="0.15"/> <!-- above object -->
+  <arg name="pregrasp_dz" default="0.15"/>
   <arg name="approach_dist" default="0.10"/>
   <arg name="retreat_dist" default="0.10"/>
 
-  <!-- Gripper joint targets (simple joint-value control placeholder) -->
+  <!-- Gripper joint targets -->
   <arg name="gripper_open" default="0.04"/>
   <arg name="gripper_closed" default="0.00"/>
 
@@ -37,5 +37,15 @@
 
     <param name="gripper_open" value="$(arg gripper_open)"/>
     <param name="gripper_closed" value="$(arg gripper_closed)"/>
+
+    <!-- label mapping + KDE settings (private params for this node) -->
+    <rosparam param="label_aliases">
+      apple: ["apple", "sports ball", "ball"]
+      burger: ["box", "book", "laptop"]
+      cola: ["bottle", "can", "glass"]
+    </rosparam>
+
+    <param name="kde_bandwidth" value="0.03" />
+    <param name="min_samples" value="2" />
   </node>
 </launch>
