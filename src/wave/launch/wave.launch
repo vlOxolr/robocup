@@ -1,0 +1,7 @@
+<launch>
+  <arg name="config" default="$(find wave)/config/wave.yaml" />
+
+  <node pkg="wave" type="yolo_wave_tiago2.py" name="yolo_wave_greeter" output="screen">
+    <rosparam file="$(arg config)" command="load" />
+  </node>
+</launch>

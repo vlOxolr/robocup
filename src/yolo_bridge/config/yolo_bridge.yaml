@@ -1,0 +1,9 @@
+image_topic: /xtion/rgb/image_raw
+model: yolov8n.pt
+device: 0
+conf: 0.24
+iou: 0.5
+classes: []
+publish_vis: true
+line_thickness: 2
+font_scale: 0.6
