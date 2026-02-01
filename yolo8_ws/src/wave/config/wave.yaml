@@ -1,0 +1,30 @@
+image_topic: /xtion/rgb/image_raw
+det_model: yolov8n.pt
+pose_model: yolov8n-pose.pt
+device: 0
+
+conf_det: 0.35
+iou_det: 0.5
+conf_pose: 0.45
+iou_pose: 0.5
+
+process_hz: 8.0
+
+empty_reset_sec: 2.0
+session_timeout_sec: 30.0
+
+wave_time_sec: 1.0
+wave_min_swing_px: 65.0
+wave_min_dir_changes: 2
+wave_min_raised_frames: 3
+wave_raise_margin_ratio: 0.12
+
+show_window: true
+window_name: "YOLO WaveGreeter (annotated)"
+exit_on_q: false
+window_w: 960
+window_h: 540
+
+enable_tts: true
+tts_lang: en_GB
+tts_cooldown_sec: 5.0

@@ -1,0 +1,7 @@
+<launch>
+  <arg name="config" default="$(find yolo_bridge)/config/yolo_bridge.yaml" />
+
+  <node pkg="yolo_bridge" type="yolov8_darknet_bridge.py" name="yolov8_darknet_bridge" output="screen">
+    <rosparam file="$(arg config)" command="load" />
+  </node>
+</launch>
