@@ -1,7 +1,7 @@
 # 放置点坐标（base_link）
-place_x: 0.82
+place_x: 0.7
 place_y: 0.0
-place_z: 0.78
+place_z: 0.74
 
 # 放置姿态（RPY, 弧度）
 place_roll: -1.57
@@ -10,9 +10,8 @@ place_yaw: 1.57
 
 
 # 抬升与放置流程参数
-lift: 0.06
+lift: 0.00
 pre_place: 0.0
-pre_place_offset_x: -0.02
 retreat: 0.30
 
 # 夹爪打开位置与等待时间

@@ -1,7 +1,8 @@
 <launch>
+  <!-- Load grasping parameters -->
   <arg name="config" default="$(find grasp)/launch/config/grasp_place.yaml" />
-
-  <!-- 放置节点参数从 yaml 加载（私有命名空间） -->
+  
+  <!-- Start the grasping node -->
   <node pkg="grasp" type="grasp_place_node" name="grasp_place_node" output="screen">
     <rosparam file="$(arg config)" command="load" />
   </node>

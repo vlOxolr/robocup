@@ -194,11 +194,9 @@ int main(int argc, char** argv) {
   nh.param("table_size_y", table_sy, table_sy);
   nh.param("table_size_z", table_sz, table_sz);
 
-  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-  bool table_added = false;
-
   // 将桌子加入规划场景，避免从下方绕行
   if (enable_table) {
+    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
     moveit_msgs::CollisionObject table;
     table.id = "place_table";
     table.header.frame_id = base_frame;
@@ -269,7 +267,6 @@ int main(int argc, char** argv) {
     table.operation = table.ADD;
 
     planning_scene_interface.applyCollisionObject(table);
-    table_added = true;
   }
 
   ros::Publisher gripper_pub =
@@ -298,9 +295,25 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // 1.5) 执行调整移动 (0.05, 0, 0.03)
+  ROS_INFO("Adjusting position by (0.1, 0, 0.03)");
+  geometry_msgs::PoseStamped current_pose = move_group.getCurrentPose(move_group.getEndEffectorLink());
+  geometry_msgs::Pose adjust_pose = current_pose.pose;
+  adjust_pose.position.x += 0.17;
+  adjust_pose.position.y += 0.0;
+  adjust_pose.position.z += 0.0;
+
+  if (!cartesianToPose(move_group, adjust_pose, eef_step, jump_threshold)) {
+    ROS_ERROR("Adjustment move failed");
+    return 1;
+  }
+
   // 2) 直线下降到放置点（笛卡尔）
+  // 由于步骤1.5向上移动了0.03m，需要额外下降0.03m
+ // double total_descent = pre_place + ;
+    // 2) 直线下降到放置点（笛卡尔）
   if (pre_place > 1e-4) {
-    if (!moveEndEffectorStraightDirection(move_group, 0, 0, -1, pre_place, eef_step, jump_threshold)) {
+    if (!moveEndEffectorStraightDirection(move_group, 0, 0, -0.03, pre_place, eef_step, jump_threshold)) {
       return 1;
     }
   }
@@ -321,10 +334,6 @@ int main(int argc, char** argv) {
     if (!moveEndEffectorStraightDirection(move_group, 0, 0, 1, retreat, eef_step, jump_threshold)) {
       return 1;
     }
-  }
-
-  if (table_added) {
-    planning_scene_interface.removeCollisionObjects({"place_table"});
   }
 
   ROS_INFO("放置完成");
