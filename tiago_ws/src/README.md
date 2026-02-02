@@ -83,7 +83,7 @@ Terminal 3 – Run plane segmentation node
 docker exec -it tiago_build /bin/bash
 source /opt/ros/noetic/setup.bash
 source /home/ros/workspaces/tiago_ws/devel/setup.bash
-rosrun plane_segmentation plane_segmentation_node
+roslaunch plane_segmentation plane_segmentation_tiago.launch
 ```
 
 Terminal 4 – Visualize in RViz
