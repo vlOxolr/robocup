@@ -1,6 +1,0 @@
-string order_id
-string status
-string reason
----
-bool ok
-string reason

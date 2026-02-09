@@ -1,6 +1,0 @@
-actuator_state_controller:
-  type: actuator_state_controller/ActuatorStateController
-  publish_absolute_position: true
-  publish_torque: true
-  publish_rate: 10
-

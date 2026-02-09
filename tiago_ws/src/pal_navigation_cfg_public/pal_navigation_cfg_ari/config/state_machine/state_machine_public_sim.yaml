@@ -1,5 +1,0 @@
-robot: ari
-
-mapping: karto
-
-localization: amcl

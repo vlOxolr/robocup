@@ -1,9 +1,0 @@
-<launch>
-  <!-- Load grasping parameters -->
-  <arg name="config" default="$(find grasp)/launch/config/grasp_place.yaml" />
-  
-  <!-- Start the grasping node -->
-  <node pkg="grasp" type="grasp_place_node" name="grasp_place_node" output="screen">
-    <rosparam file="$(arg config)" command="load" />
-  </node>
-</launch>

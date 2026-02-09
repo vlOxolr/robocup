@@ -1,5 +1,0 @@
-tiago_ordering/ReserveItem[] items
----
-bool ok
-string reason
-tiago_ordering/Inventory inventory_after

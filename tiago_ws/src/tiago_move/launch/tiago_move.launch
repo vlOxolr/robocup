@@ -1,5 +1,0 @@
-<launch>
-  <node name="tiago_move" pkg="tiago_move" type="tiago_move_node" output="screen">
-    <rosparam command="load" file="$(find tiago_move)/launch/config/config.yaml"/>
-  </node>
-</launch>

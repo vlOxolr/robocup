@@ -1,5 +1,0 @@
-robot: omni_base
-
-mapping: gmapping
-
-localization: amcl
