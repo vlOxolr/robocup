@@ -1,0 +1,11 @@
+<launch>
+
+  <!-- Start state machine -->
+  <node
+    pkg="state_machine"
+    type="state_machine.py"
+    name="restaurant_service_sm"
+    output="screen"
+  />
+
+</launch>

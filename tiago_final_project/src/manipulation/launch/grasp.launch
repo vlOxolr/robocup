@@ -1,0 +1,13 @@
+<launch>
+  <!-- 启动move_group（如果需要） -->
+  <include file="$(find tiago_moveit_config)/launch/move_group.launch">
+    <arg name="end_effector" value="pal-gripper"/>
+  </include>
+
+  <!-- 启动抓取节点 -->
+  <node name="grasp_planner" pkg="manipulation" type="simple_grasp_planner.py" output="screen">
+    <param name="target_ns" value="cup"/>
+    <param name="move_group" value="arm_torso"/>
+    <param name="end_effector_link" value="gripper_link"/>
+  </node>
+</launch>

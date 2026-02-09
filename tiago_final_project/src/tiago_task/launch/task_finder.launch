@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="tiago_task"
+        type="task_finder.py"
+        name="task_finder"
+        output="screen"/>
+</launch>

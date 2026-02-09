@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>state_machine</name>
+  <version>0.0.1</version>
+  <description>High-level SMACH state machine for TIAGo restaurant service</description>
+
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <!-- Build tool -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>smach</exec_depend>
+  <exec_depend>smach_ros</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
+  <!-- Your dependent packages -->
+  <exec_depend>navigation</exec_depend>
+  <exec_depend>ordering</exec_depend>
+
+</package>

@@ -1,0 +1,5 @@
+ordering/ReserveItem[] items
+---
+bool ok
+string reason
+ordering/Inventory inventory_after

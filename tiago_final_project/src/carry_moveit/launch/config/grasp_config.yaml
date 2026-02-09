@@ -1,0 +1,62 @@
+# ===== marker source =====
+markers_topic: "/item_markers"
+
+# ===== target selection =====
+selection_mode: "ns"      # ns | nearest
+target_ns: "apple"
+
+# ===== lock & confirmation (N frames) =====
+lock_target: true
+lock_timeout_sec: 0.0          # 0 = 永不自动解锁
+confirm_frames: 2
+confirm_pos_eps: 0.05
+confirm_timeout_sec: 5
+
+# ===== offsets used by grasp.cpp =====
+pregrasp_offset:
+  x: -0.20
+  y: 0.0
+  z: 0.08
+
+
+grasp_offset:
+  x: -0.20   # top-down: align above target, closer to base
+  y: 0.0
+  z: 0.02
+
+lift_offset:
+  x: 0.0
+  y: 0.0
+  z: 0.10
+
+# ===== end-effector orientation (deg) =====
+ee_rpy:
+  roll: 180
+  pitch: 0
+  yaw: 0
+
+# ===== MoveIt =====
+move_group: "arm_torso"            # 或 "arm_torso"
+ee_link: "gripper_link"
+planner_id: "RRTConnectkConfigDefault"
+planning_time: 15.0
+goal_tolerance: 0.02
+velocity_scaling: 0.30
+
+# ===== torso optional =====
+use_torso: true
+
+# ===== legacy params read in grasp.cpp (keep for compatibility) =====
+grasp_adjustment:
+  position:
+    z: 0.0
+lift_adjustment:
+  position:
+    z: 0.0
+
+# ===== gripper =====
+use_system_open: true
+gripper_time: 1.0
+# gripper_joints: ["gripper_left_finger_joint", "gripper_right_finger_joint"]
+# gripper_open_pos: [1.0, 1.0]
+# gripper_close_pos: [0.0, 0.0]

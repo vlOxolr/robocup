@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="tiago_task"
+        type="task_smash.py"
+        name="task_smash"
+        output="screen"/>
+</launch>

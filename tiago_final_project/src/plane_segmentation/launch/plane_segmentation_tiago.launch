@@ -1,0 +1,27 @@
+<!-- <?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+
+  <param name="point_cloud_topic" value="/xtion/depth_registered/points" />
+  <param name="base_frame" value="base_footprint" />
+
+  <node name="plane_segmentation_node" pkg="plane_segmentation" type="plane_segmentation_node" output="screen"/>
+  
+</launch> -->
+<launch>
+
+  <!-- 1. Play the rosbag you recorded in Task1 -->
+  <node pkg="rosbag" type="play" name="player"
+        args="--clock -l /home/ros/workspaces/tiago_ws/bag/task1_scene.bag" />
+
+  <!-- 2. plane segmentation node -->
+  <node pkg="plane_segmentation" type="plane_segmentation_node" name="plane_segmentation_node" output="screen">
+    <param name="input_cloud_topic" value="/xtion/depth_registered/points"/>
+    <param name="base_frame" value="base_link"/>
+  </node>
+
+  <!-- 3. Start RViz -->
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find plane_segmentation)/rviz/plane_segmentation.rviz"/>
+  
+</launch>

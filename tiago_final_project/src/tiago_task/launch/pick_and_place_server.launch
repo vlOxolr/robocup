@@ -1,0 +1,21 @@
+<launch>
+  <!-- 为当前“桌上抓瓶子”场景启动 /pickup_pose 动作服务器 -->
+  <node pkg="tiago_task"
+        type="bottle_pick_and_place_server.py"
+        name="bottle_pick_and_place_server"
+        output="screen">
+
+    <!-- 物体尺寸：先按瓶子估一个，之后可以根据效果微调 -->
+    <param name="object_height" value="0.20" />  <!-- 高度 (m) -->
+    <param name="object_width"  value="0.05" />  <!-- y 方向尺寸 -->
+    <param name="object_depth"  value="0.05" />  <!-- x 方向尺寸 -->
+
+    <!-- 允许接触的末端执行器连杆，根据你机器人实际 link 名字调整 -->
+    <rosparam param="links_to_allow_contact">
+      <!-- - gripper_link -->
+      <!-- - gripper_left_finger_link -->
+      <!-- - gripper_right_finger_link -->
+    </rosparam>
+
+  </node>
+</launch>
