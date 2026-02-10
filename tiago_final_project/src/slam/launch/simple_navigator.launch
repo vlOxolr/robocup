@@ -1,9 +1,0 @@
-<launch>
-<!-- Launch simple_navigator.py and pass a numeric function argument (1-4) as argv[1] via args="$(arg function)" -->
-  <arg name="function" default="1" doc="Function number to execute (1-4)"/>
-  <arg name="location_config" default="$(find slam)/config/restaurant_locations.yaml"/>
-  <!-- Use the slam package (this package) and point to the YAML config that contains named locations -->
-  <node name="simple_navigator" pkg="slam" type="simple_navigator.py" args="$(arg function)" output="screen">
-    <param name="location_config" value="$(arg location_config)"/>
-  </node>
-</launch>
